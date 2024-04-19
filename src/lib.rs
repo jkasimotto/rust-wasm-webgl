@@ -1,9 +1,18 @@
+use std::{cell::RefCell, rc::Rc};
+
+use nalgebra_glm::{vec3, Vec3};
 use wasm_bindgen::prelude::*;
 use web_sys::WebGlRenderingContext;
 
 mod mouse;
 mod render;
 mod shaders;
+
+struct MVMatrixValues {
+    eye: Vec3,
+    target: Vec3,
+    up: Vec3,
+}
 
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {
@@ -16,6 +25,40 @@ pub fn start() -> Result<(), JsValue> {
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
 
     // Get the WebGL rendering context from the canvas
+    let gl = get_webgl_context(&canvas)?;
+
+    // Create the shader program
+    let program = create_shader_program(&gl)?;
+
+    // Create a buffer to hold the vertex data
+    let buffer = create_vertex_buffer(&gl)?;
+
+    // Get the location of the "position" attribute in the shader program
+    let position_attribute_location = gl.get_attrib_location(&program, "position");
+
+    // Set up the vertex attribute pointer for the "position" attribute
+    set_vertex_attribute_pointer(&gl, position_attribute_location as u32);
+
+    // Create a mouse state object to track mouse events
+    let mouse_state = mouse::create_mouse_state(&canvas)?;
+
+    // Set the scale factor for rendering
+    let scale_factor = 1.0;
+
+    // Create initial values for eye, target, and up vectors
+    let eye = vec3(0.0, 0.0, 5.0);
+    let target = vec3(0.0, 0.0, 0.0);
+    let up = vec3(0.0, 1.0, 0.0);
+    let mv_matrix_values = Rc::new(RefCell::new(MVMatrixValues { eye, target, up }));
+
+
+    // Start the rendering loop
+    render::start_render_loop(gl, program, scale_factor, mouse_state, mv_matrix_values);
+
+    Ok(())
+}
+
+fn get_webgl_context(canvas: &web_sys::HtmlCanvasElement) -> Result<WebGlRenderingContext, JsValue> {
     let gl = canvas
         .get_context("webgl")?
         .unwrap()
@@ -24,16 +67,21 @@ pub fn start() -> Result<(), JsValue> {
     // Set the viewport to match the canvas size
     gl.viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
 
-    // Create the shader program
+    Ok(gl)
+}
+
+fn create_shader_program(gl: &WebGlRenderingContext) -> Result<web_sys::WebGlProgram, JsValue> {
     let program = shaders::create_program(&gl)?;
     gl.use_program(Some(&program));
+    Ok(program)
+}
 
+fn create_vertex_buffer(gl: &WebGlRenderingContext) -> Result<web_sys::WebGlBuffer, JsValue> {
     // Define the vertices for the triangle
     let vertices: [f32; 18] = [
         0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,
     ];
 
-    // Create a buffer to hold the vertex data
     let buffer = gl.create_buffer().unwrap();
     gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buffer));
 
@@ -44,12 +92,12 @@ pub fn start() -> Result<(), JsValue> {
         WebGlRenderingContext::STATIC_DRAW,
     );
 
-    // Get the location of the "position" attribute in the shader program
-    let position_attribute_location = gl.get_attrib_location(&program, "position");
+    Ok(buffer)
+}
 
-    // Set up the vertex attribute pointer for the "position" attribute
+fn set_vertex_attribute_pointer(gl: &WebGlRenderingContext, position_attribute_location: u32) {
     gl.vertex_attrib_pointer_with_i32(
-        position_attribute_location as u32,
+        position_attribute_location,
         3,
         WebGlRenderingContext::FLOAT,
         false,
@@ -58,16 +106,5 @@ pub fn start() -> Result<(), JsValue> {
     );
 
     // Enable the "position" vertex attribute array
-    gl.enable_vertex_attrib_array(position_attribute_location as u32);
-
-    // Create a mouse state object to track mouse events
-    let mouse_state = mouse::create_mouse_state(&canvas)?;
-
-    // Set the scale factor for rendering
-    let scale_factor = 1.0;
-
-    // Start the rendering loop
-    render::start_render_loop(gl, program, scale_factor, mouse_state);
-
-    Ok(())
+    gl.enable_vertex_attrib_array(position_attribute_location);
 }
