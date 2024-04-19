@@ -33,11 +33,12 @@ pub fn start() -> Result<(), JsValue> {
     // Create a buffer to hold the vertex data
     let buffer = create_vertex_buffer(&gl)?;
 
-    // Get the location of the "position" attribute in the shader program
+    // Get the location of the "position" and "color" attributes in the shader program
     let position_attribute_location = gl.get_attrib_location(&program, "position");
+    let color_attribute_location = gl.get_attrib_location(&program, "color");
 
-    // Set up the vertex attribute pointer for the "position" attribute
-    set_vertex_attribute_pointer(&gl, position_attribute_location as u32);
+    // Set up the vertex attribute pointers for the "position" and "color" attributes
+    set_vertex_attribute_pointer(&gl, position_attribute_location as u32, color_attribute_location as u32);
 
     // Create a mouse state object to track mouse events
     let mouse_state = mouse::create_mouse_state(&canvas)?;
@@ -77,15 +78,17 @@ fn create_shader_program(gl: &WebGlRenderingContext) -> Result<web_sys::WebGlPro
 }
 
 fn create_vertex_buffer(gl: &WebGlRenderingContext) -> Result<web_sys::WebGlBuffer, JsValue> {
-    // Define the vertices for the triangle
-    let vertices: [f32; 18] = [
-        0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+    let vertices: [f32; 36] = [
+        1.0, 0.0, 0.0,  1.0, 0.0, 0.0,  // x-axis (red)
+        -1.0, 0.0, 0.0,  1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,  0.0, 1.0, 0.0,  // y-axis (blue)
+        0.0, -1.0, 0.0,  0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0,  0.0, 0.0, 1.0,  // z-axis (green)
+        0.0, 0.0, -1.0,  0.0, 0.0, 1.0,
     ];
 
     let buffer = gl.create_buffer().unwrap();
     gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buffer));
-
-    // Load the vertex data into the buffer
     gl.buffer_data_with_array_buffer_view(
         WebGlRenderingContext::ARRAY_BUFFER,
         &js_sys::Float32Array::from(vertices.as_slice()),
@@ -95,16 +98,24 @@ fn create_vertex_buffer(gl: &WebGlRenderingContext) -> Result<web_sys::WebGlBuff
     Ok(buffer)
 }
 
-fn set_vertex_attribute_pointer(gl: &WebGlRenderingContext, position_attribute_location: u32) {
+fn set_vertex_attribute_pointer(gl: &WebGlRenderingContext, position_attribute_location: u32, color_attribute_location: u32) {
     gl.vertex_attrib_pointer_with_i32(
         position_attribute_location,
         3,
         WebGlRenderingContext::FLOAT,
         false,
-        0,
+        6 * std::mem::size_of::<f32>() as i32,
         0,
     );
-
-    // Enable the "position" vertex attribute array
     gl.enable_vertex_attrib_array(position_attribute_location);
+
+    gl.vertex_attrib_pointer_with_i32(
+        color_attribute_location,
+        3,
+        WebGlRenderingContext::FLOAT,
+        false,
+        6 * std::mem::size_of::<f32>() as i32,
+        3 * std::mem::size_of::<f32>() as i32,
+    );
+    gl.enable_vertex_attrib_array(color_attribute_location);
 }

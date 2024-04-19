@@ -9,48 +9,40 @@ use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader};
 // The vertex shader processes each vertex of the geometry and determines its position on the screen.
 // The fragment shader determines the color of each pixel that makes up the geometry.
 pub fn create_program(gl: &WebGlRenderingContext) -> Result<WebGlProgram, JsValue> {
-    // The vertex shader source code is written in GLSL (OpenGL Shading Language).
-    // It defines the position of each vertex using the 'position' attribute.
-    // The 'uMVMatrix' and 'uPMatrix' are uniform variables that represent transformation matrices.
-    // - 'uMVMatrix' is the Model-View matrix, which transforms vertices from model space to view space.
-    //   It combines the model matrix (model to world space) and the view matrix (world to view space).
-    // - 'uPMatrix' is the Projection matrix, which transforms vertices from view space to clip space.
-    //   It defines the camera's projection (perspective or orthographic) and sets up the view frustum.
     let vert_shader = compile_shader(
         &gl,
         WebGlRenderingContext::VERTEX_SHADER,
         r#"
-    attribute vec3 position;
-    uniform mat4 uMVMatrix;
-    uniform mat4 uPMatrix;
+        attribute vec3 position;
+        attribute vec3 color;
+        uniform mat4 uMVMatrix;
+        uniform mat4 uPMatrix;
 
-    void main() {
-        // Transform the vertex position from model space to clip space.
-        // The 'position' attribute is a vec3, so we need to convert it to a vec4 before multiplication.
-        // We do this by appending a 1.0 as the fourth component, which represents a point in homogeneous coordinates.
-        // The multiplication order is important: projection * view * model * position.
-        // This transforms the vertex from model space to view space, and then from view space to clip space.
-        gl_Position = uPMatrix * uMVMatrix * vec4(position, 1.0);
-    }
-    "#,
-    )?;
+        varying vec3 vColor;
 
-    // The fragment shader source code is also written in GLSL.
-    // It determines the color of each pixel. In this case, it sets the color to black (0.0, 0.0, 0.0, 1.0).
-    let frag_shader = compile_shader(
-        &gl,
-        WebGlRenderingContext::FRAGMENT_SHADER,
-        r#"
         void main() {
-            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            gl_Position = uPMatrix * uMVMatrix * vec4(position, 1.0);
+            vColor = color;
         }
         "#,
     )?;
 
-    // The compiled vertex and fragment shaders are linked together into a shader program.
+    let frag_shader = compile_shader(
+        &gl,
+        WebGlRenderingContext::FRAGMENT_SHADER,
+        r#"
+        precision mediump float;
+
+        varying vec3 vColor;
+
+        void main() {
+            gl_FragColor = vec4(vColor, 1.0);
+        }
+        "#,
+    )?;
+
     link_program(&gl, &vert_shader, &frag_shader)
 }
-
 // This function compiles a shader from its source code.
 // It takes the WebGL rendering context, the shader type (vertex or fragment), and the shader source code as input.
 fn compile_shader(
