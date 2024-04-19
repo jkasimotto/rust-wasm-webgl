@@ -2,24 +2,30 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Rust WebAssembly Circle Demo</title>
+    <title>3D X-Y-Z Plane</title>
     <style>
-        canvas {
-            display: block;
-            margin: 0 auto;
+        body {
+            margin: 0;
+            overflow: hidden;
         }
-        input {
-            display: block;
-            margin: 20px auto;
+        canvas {
+            width: 100%;
+            height: 100%;
         }
     </style>
 </head>
 <body>
-    <canvas id="canvas" width="400" height="400"></canvas>
-    <input id="radius-slider" type="range" min="10" max="150" value="50" step="1">
+    <canvas id="canvas"></canvas>
+
     <script type="module">
-        import init from './pkg/neara.js';
-        init();
+        import init, { start } from './pkg/neara.js';
+
+        async function run() {
+            await init();
+            start();
+        }
+
+        run();
     </script>
 </body>
 </html>

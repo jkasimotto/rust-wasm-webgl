@@ -1,6 +1,6 @@
-use std::rc::Rc;
 use wasm_bindgen::prelude::*;
-use web_sys::{CanvasRenderingContext2d, HtmlInputElement, Event};
+use web_sys::{WebGlRenderingContext, WebGlProgram, WebGlShader};
+use nalgebra_glm::{Vec3, Mat4, perspective};
 
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {
@@ -8,42 +8,140 @@ pub fn start() -> Result<(), JsValue> {
     let canvas = document.get_element_by_id("canvas").unwrap();
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
 
-    let context = Rc::new(canvas
-        .get_context("2d")?
+    let gl = canvas
+        .get_context("webgl")?
         .unwrap()
-        .dyn_into::<CanvasRenderingContext2d>()?);
+        .dyn_into::<WebGlRenderingContext>()?;
 
-    let slider = Rc::new(document
-        .get_element_by_id("radius-slider")
-        .unwrap()
-        .dyn_into::<HtmlInputElement>()?);
+    let vert_shader = compile_shader(
+        &gl,
+        WebGlRenderingContext::VERTEX_SHADER,
+        r#"
+        attribute vec3 position;
+        uniform mat4 uMVMatrix;
+        uniform mat4 uPMatrix;
+        void main() {
+            gl_Position = uPMatrix * uMVMatrix * vec4(position, 1.0);
+        }
+    "#,
+    )?;
 
-    let context_clone = context.clone();
-    let slider_clone = slider.clone();
+    let frag_shader = compile_shader(
+        &gl,
+        WebGlRenderingContext::FRAGMENT_SHADER,
+        r#"
+        void main() {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        }
+    "#,
+    )?;
 
-    let closure = Closure::wrap(Box::new(move |_: Event| {
-        let radius = slider_clone.value().parse::<f64>().unwrap();
-        draw_circle(&context_clone, radius);
-    }) as Box<dyn FnMut(_)>);
+    let program = link_program(&gl, &vert_shader, &frag_shader)?;
+    gl.use_program(Some(&program));
 
-    slider.set_oninput(Some(closure.as_ref().unchecked_ref()));
-    closure.forget();
+    let vertices: [f32; 18] = [
+        0.0, 0.0, 0.0,
+        1.0, 0.0, 0.0,
+        0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0,
+        0.0, 0.0, 1.0,
+    ];
 
-    draw_circle(&context, 50.0);
+    let buffer = gl.create_buffer().unwrap();
+    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buffer));
+    gl.buffer_data_with_array_buffer_view(
+        WebGlRenderingContext::ARRAY_BUFFER,
+        &js_sys::Float32Array::from(vertices.as_slice()),
+        WebGlRenderingContext::STATIC_DRAW,
+    );
+
+    let position_attribute_location = gl.get_attrib_location(&program, "position");
+    gl.vertex_attrib_pointer_with_i32(
+        position_attribute_location as u32,
+        3,
+        WebGlRenderingContext::FLOAT,
+        false,
+        0,
+        0,
+    );
+    gl.enable_vertex_attrib_array(position_attribute_location as u32);
+
+    let mv_matrix_location = gl.get_uniform_location(&program, "uMVMatrix").unwrap();
+    let p_matrix_location = gl.get_uniform_location(&program, "uPMatrix").unwrap();
+
+    let mv_matrix = Mat4::look_at_rh(
+        &Vec3::new(1.5, 1.5, 1.5).into(),
+        &Vec3::new(0.0, 0.0, 0.0).into(),
+        &Vec3::new(0.0, 1.0, 0.0),
+    );
+    let p_matrix = perspective(800.0 / 600.0, 45.0_f32.to_radians(), 0.1, 100.0);
+
+    gl.uniform_matrix4fv_with_f32_array(
+        Some(&mv_matrix_location),
+        false,
+        mv_matrix.as_slice(),
+    );
+    gl.uniform_matrix4fv_with_f32_array(
+        Some(&p_matrix_location),
+        false,
+        p_matrix.as_slice(),
+    );
+    gl.clear_color(1.0, 1.0, 1.0, 1.0);
+    gl.clear(WebGlRenderingContext::COLOR_BUFFER_BIT | WebGlRenderingContext::DEPTH_BUFFER_BIT);
+    gl.enable(WebGlRenderingContext::DEPTH_TEST);
+
+    gl.draw_arrays(WebGlRenderingContext::LINES, 0, 6);
 
     Ok(())
 }
 
-fn draw_circle(context: &CanvasRenderingContext2d, radius: f64) {
-    let canvas_width = context.canvas().unwrap().width() as f64;
-    let canvas_height = context.canvas().unwrap().height() as f64;
-    let center_x = canvas_width / 2.0;
-    let center_y = canvas_height / 2.0;
+fn compile_shader(
+    gl: &WebGlRenderingContext,
+    shader_type: u32,
+    source: &str,
+) -> Result<web_sys::WebGlShader, String> {
+    let shader = gl
+        .create_shader(shader_type)
+        .ok_or_else(|| "Could not create shader".to_string())?;
+    gl.shader_source(&shader, source);
+    gl.compile_shader(&shader);
 
-    context.clear_rect(0.0, 0.0, canvas_width, canvas_height);
-    context.begin_path();
-    context
-        .arc(center_x, center_y, radius, 0.0, 2.0 * std::f64::consts::PI)
-        .unwrap();
-    context.stroke();
+    if gl
+        .get_shader_parameter(&shader, WebGlRenderingContext::COMPILE_STATUS)
+        .as_bool()
+        .unwrap_or(false)
+    {
+        Ok(shader)
+    } else {
+        Err(gl
+            .get_shader_info_log(&shader)
+            .unwrap_or_else(|| "Unknown error creating shader".to_string()))
+    }
+}
+
+fn link_program(
+    gl: &WebGlRenderingContext,
+    vert_shader: &WebGlShader,
+    frag_shader: &WebGlShader,
+) -> Result<WebGlProgram, String> {
+    let program = gl
+        .create_program()
+        .ok_or_else(|| "Unable to create shader program".to_string())?;
+
+    gl.attach_shader(&program, vert_shader);
+    gl.attach_shader(&program, frag_shader);
+    gl.link_program(&program);
+
+    if gl
+        .get_program_parameter(&program, WebGlRenderingContext::LINK_STATUS)
+        .as_bool()
+        .unwrap_or(false)
+    {
+        Ok(program)
+    } else {
+        Err(gl
+            .get_program_info_log(&program)
+            .unwrap_or_else(|| "Unknown error creating program".to_string()))
+    }
 }
