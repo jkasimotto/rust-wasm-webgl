@@ -1,19 +1,30 @@
 use std::{cell::RefCell, rc::Rc};
 
-use wasm_bindgen::prelude::*;
-use web_sys::{WebGlRenderingContext, WebGlProgram, WebGlShader};
 use nalgebra_glm::{perspective, scale, Mat4, Vec3};
+use wasm_bindgen::prelude::*;
+use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader, MouseEvent};
 
+struct MouseState {
+    is_dragging: bool,
+    last_x: f32,
+    last_y: f32,
+    rotation_x: f32,
+    rotation_y: f32,
+}
 
-fn render_scene(gl: &WebGlRenderingContext, program: &WebGlProgram, scale_factor: f32) {
+fn render_scene(gl: &WebGlRenderingContext, program: &WebGlProgram, distance: f32, mouse_state: &MouseState) {
     let mv_matrix = Mat4::look_at_rh(
         &Vec3::new(1.5, 1.5, 1.5).into(),
         &Vec3::new(0.0, 0.0, 0.0).into(),
         &Vec3::new(0.0, 1.0, 0.0),
     );
 
-    let scaling_vector = Vec3::new(scale_factor, scale_factor, scale_factor);
-    let scaled_mv_matrix = scale(&mv_matrix, &scaling_vector);
+    let translation_vector = Vec3::new(0.0, 0.0, -distance);
+    let translated_mv_matrix = mv_matrix.append_translation(&translation_vector);
+
+    let rotation_x_matrix = Mat4::new_rotation(Vec3::x() * mouse_state.rotation_x);
+    let rotation_y_matrix = Mat4::new_rotation(Vec3::y() * mouse_state.rotation_y);
+    let rotated_mv_matrix = translated_mv_matrix * rotation_x_matrix * rotation_y_matrix;
 
     let p_matrix = perspective(800.0 / 600.0, 45.0_f32.to_radians(), 0.1, 100.0);
 
@@ -23,14 +34,10 @@ fn render_scene(gl: &WebGlRenderingContext, program: &WebGlProgram, scale_factor
     gl.uniform_matrix4fv_with_f32_array(
         Some(&mv_matrix_location),
         false,
-        scaled_mv_matrix.as_slice(),
+        rotated_mv_matrix.as_slice(),
     );
 
-    gl.uniform_matrix4fv_with_f32_array(
-        Some(&p_matrix_location),
-        false,
-        p_matrix.as_slice(),
-    );
+    gl.uniform_matrix4fv_with_f32_array(Some(&p_matrix_location), false, p_matrix.as_slice());
 
     gl.clear_color(1.0, 1.0, 1.0, 1.0);
     gl.clear(WebGlRenderingContext::COLOR_BUFFER_BIT | WebGlRenderingContext::DEPTH_BUFFER_BIT);
@@ -76,12 +83,7 @@ pub fn start() -> Result<(), JsValue> {
     gl.use_program(Some(&program));
 
     let vertices: [f32; 18] = [
-        0.0, 0.0, 0.0,
-        1.0, 0.0, 0.0,
-        0.0, 0.0, 0.0,
-        0.0, 1.0, 0.0,
-        0.0, 0.0, 0.0,
-        0.0, 0.0, 1.0,
+        0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,
     ];
 
     let buffer = gl.create_buffer().unwrap();
@@ -103,30 +105,88 @@ pub fn start() -> Result<(), JsValue> {
     );
     gl.enable_vertex_attrib_array(position_attribute_location as u32);
 
+    let mouse_state = Rc::new(RefCell::new(MouseState {
+        is_dragging: false,
+        last_x: 0.0,
+        last_y: 0.0,
+        rotation_x: 0.0,
+        rotation_y: 0.0,
+    }));
+
+    let mouse_state_clone = mouse_state.clone();
+    let mouse_down_handler = Closure::wrap(Box::new(move |event: MouseEvent| {
+        let mut mouse_state = mouse_state_clone.borrow_mut();
+        mouse_state.is_dragging = true;
+        mouse_state.last_x = event.client_x() as f32;
+        mouse_state.last_y = event.client_y() as f32;
+    }) as Box<dyn FnMut(_)>);
+    canvas.add_event_listener_with_callback("mousedown", mouse_down_handler.as_ref().unchecked_ref())?;
+    mouse_down_handler.forget();
+
+    let mouse_state_clone = mouse_state.clone();
+    let mouse_move_handler = Closure::wrap(Box::new(move |event: MouseEvent| {
+        let mut mouse_state = mouse_state_clone.borrow_mut();
+        if mouse_state.is_dragging {
+            let delta_x = event.client_x() as f32 - mouse_state.last_x;
+            let delta_y = event.client_y() as f32 - mouse_state.last_y;
+            mouse_state.last_x = event.client_x() as f32;
+            mouse_state.last_y = event.client_y() as f32;
+            mouse_state.rotation_x += delta_y * 0.01;
+            mouse_state.rotation_y += delta_x * 0.01;
+        }
+    }) as Box<dyn FnMut(_)>);
+    canvas.add_event_listener_with_callback("mousemove", mouse_move_handler.as_ref().unchecked_ref())?;
+    mouse_move_handler.forget();
+
+    let mouse_state_clone = mouse_state.clone();
+    let mouse_up_handler = Closure::wrap(Box::new(move |event: MouseEvent| {
+        let mut mouse_state = mouse_state_clone.borrow_mut();
+        mouse_state.is_dragging = false;
+    }) as Box<dyn FnMut(_)>);
+    canvas.add_event_listener_with_callback("mouseup", mouse_up_handler.as_ref().unchecked_ref())?;
+    mouse_up_handler.forget();
+
     let scale_factor = 1.0;
     let scale_speed = 0.01;
 
     let gl_clone = gl.clone();
     let program_clone = program.clone();
     let scale_factor_ref = Rc::new(RefCell::new(scale_factor));
+    let mouse_state_clone = mouse_state.clone();
 
     let render_loop = Rc::new(RefCell::new(None::<Closure<dyn FnMut()>>));
     let render_loop_clone = render_loop.clone();
 
     *render_loop_clone.borrow_mut() = Some(Closure::wrap(Box::new(move || {
         let mut scale_factor = scale_factor_ref.borrow_mut();
-        *scale_factor -= scale_speed;
-        if *scale_factor < 0.1 {
-            *scale_factor = 1.0;
-        }
 
-        render_scene(&gl_clone, &program_clone, *scale_factor);
+        let mouse_state = mouse_state_clone.borrow();
+        render_scene(&gl_clone, &program_clone, *scale_factor, &mouse_state);
 
-        web_sys::window().unwrap().request_animation_frame(render_loop.borrow().as_ref().unwrap().as_ref().unchecked_ref()).unwrap();
+        web_sys::window()
+            .unwrap()
+            .request_animation_frame(
+                render_loop
+                    .borrow()
+                    .as_ref()
+                    .unwrap()
+                    .as_ref()
+                    .unchecked_ref(),
+            )
+            .unwrap();
     }) as Box<dyn FnMut()>));
 
-    web_sys::window().unwrap().request_animation_frame(render_loop_clone.borrow().as_ref().unwrap().as_ref().unchecked_ref()).unwrap();
-
+    web_sys::window()
+        .unwrap()
+        .request_animation_frame(
+            render_loop_clone
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .as_ref()
+                .unchecked_ref(),
+        )
+        .unwrap();
 
     Ok(())
 }
