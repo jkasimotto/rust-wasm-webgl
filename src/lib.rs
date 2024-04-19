@@ -1,6 +1,42 @@
+use std::{cell::RefCell, rc::Rc};
+
 use wasm_bindgen::prelude::*;
 use web_sys::{WebGlRenderingContext, WebGlProgram, WebGlShader};
-use nalgebra_glm::{Vec3, Mat4, perspective};
+use nalgebra_glm::{perspective, scale, Mat4, Vec3};
+
+
+fn render_scene(gl: &WebGlRenderingContext, program: &WebGlProgram, scale_factor: f32) {
+    let mv_matrix = Mat4::look_at_rh(
+        &Vec3::new(1.5, 1.5, 1.5).into(),
+        &Vec3::new(0.0, 0.0, 0.0).into(),
+        &Vec3::new(0.0, 1.0, 0.0),
+    );
+
+    let scaling_vector = Vec3::new(scale_factor, scale_factor, scale_factor);
+    let scaled_mv_matrix = scale(&mv_matrix, &scaling_vector);
+
+    let p_matrix = perspective(800.0 / 600.0, 45.0_f32.to_radians(), 0.1, 100.0);
+
+    let mv_matrix_location = gl.get_uniform_location(&program, "uMVMatrix").unwrap();
+    let p_matrix_location = gl.get_uniform_location(&program, "uPMatrix").unwrap();
+
+    gl.uniform_matrix4fv_with_f32_array(
+        Some(&mv_matrix_location),
+        false,
+        scaled_mv_matrix.as_slice(),
+    );
+
+    gl.uniform_matrix4fv_with_f32_array(
+        Some(&p_matrix_location),
+        false,
+        p_matrix.as_slice(),
+    );
+
+    gl.clear_color(1.0, 1.0, 1.0, 1.0);
+    gl.clear(WebGlRenderingContext::COLOR_BUFFER_BIT | WebGlRenderingContext::DEPTH_BUFFER_BIT);
+    gl.enable(WebGlRenderingContext::DEPTH_TEST);
+    gl.draw_arrays(WebGlRenderingContext::LINES, 0, 6);
+}
 
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {
@@ -67,31 +103,30 @@ pub fn start() -> Result<(), JsValue> {
     );
     gl.enable_vertex_attrib_array(position_attribute_location as u32);
 
-    let mv_matrix_location = gl.get_uniform_location(&program, "uMVMatrix").unwrap();
-    let p_matrix_location = gl.get_uniform_location(&program, "uPMatrix").unwrap();
+    let scale_factor = 1.0;
+    let scale_speed = 0.01;
 
-    let mv_matrix = Mat4::look_at_rh(
-        &Vec3::new(1.5, 1.5, 1.5).into(),
-        &Vec3::new(0.0, 0.0, 0.0).into(),
-        &Vec3::new(0.0, 1.0, 0.0),
-    );
-    let p_matrix = perspective(800.0 / 600.0, 45.0_f32.to_radians(), 0.1, 100.0);
+    let gl_clone = gl.clone();
+    let program_clone = program.clone();
+    let scale_factor_ref = Rc::new(RefCell::new(scale_factor));
 
-    gl.uniform_matrix4fv_with_f32_array(
-        Some(&mv_matrix_location),
-        false,
-        mv_matrix.as_slice(),
-    );
-    gl.uniform_matrix4fv_with_f32_array(
-        Some(&p_matrix_location),
-        false,
-        p_matrix.as_slice(),
-    );
-    gl.clear_color(1.0, 1.0, 1.0, 1.0);
-    gl.clear(WebGlRenderingContext::COLOR_BUFFER_BIT | WebGlRenderingContext::DEPTH_BUFFER_BIT);
-    gl.enable(WebGlRenderingContext::DEPTH_TEST);
+    let render_loop = Rc::new(RefCell::new(None::<Closure<dyn FnMut()>>));
+    let render_loop_clone = render_loop.clone();
 
-    gl.draw_arrays(WebGlRenderingContext::LINES, 0, 6);
+    *render_loop_clone.borrow_mut() = Some(Closure::wrap(Box::new(move || {
+        let mut scale_factor = scale_factor_ref.borrow_mut();
+        *scale_factor -= scale_speed;
+        if *scale_factor < 0.1 {
+            *scale_factor = 1.0;
+        }
+
+        render_scene(&gl_clone, &program_clone, *scale_factor);
+
+        web_sys::window().unwrap().request_animation_frame(render_loop.borrow().as_ref().unwrap().as_ref().unchecked_ref()).unwrap();
+    }) as Box<dyn FnMut()>));
+
+    web_sys::window().unwrap().request_animation_frame(render_loop_clone.borrow().as_ref().unwrap().as_ref().unchecked_ref()).unwrap();
+
 
     Ok(())
 }
