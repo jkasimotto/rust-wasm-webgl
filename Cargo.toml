@@ -23,5 +23,6 @@ features = [
     "WebGlShader",
     "WebGlUniformLocation",
     "Window",
-    "MouseEvent"
+    "MouseEvent",
+    "WheelEvent"
 ]
