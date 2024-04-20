@@ -17,13 +17,13 @@ pub fn create_program(gl: &WebGlRenderingContext) -> Result<WebGlProgram, JsValu
         attribute vec3 color;
         uniform mat4 uMVMatrix;
         uniform mat4 uPMatrix;
-
+        uniform float uScaleFactor;
         varying vec3 vColor;
 
         void main() {
             gl_Position = uPMatrix * uMVMatrix * vec4(position, 1.0);
             vColor = color;
-            gl_PointSize = 5.0;
+            gl_PointSize = 5.0 * uScaleFactor;
         }
         "#,
     )?;

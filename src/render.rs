@@ -19,6 +19,8 @@ pub fn render_scene(
     let p_matrix = create_projection_matrix();
     set_uniform_matrices(gl, program, &mv_matrix, &p_matrix);
     setup_rendering(gl);
+    let scale_factor_location = gl.get_uniform_location(&program, "uScaleFactor").unwrap();
+    gl.uniform1f(Some(&scale_factor_location), -distance);
     gl.draw_arrays(WebGlRenderingContext::LINES, 0, 6); // Draw the XYZ axis lines
     gl.draw_arrays(WebGlRenderingContext::POINTS, 6, num_points as i32); // Draw the random points
 }
