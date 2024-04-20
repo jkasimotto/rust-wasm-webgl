@@ -54,7 +54,7 @@ pub fn render_scene(
     gl.draw_arrays(
         WebGlRenderingContext::TRIANGLES,
         (6 + num_points) as i32, // Start offset (after the points)
-        72 as i32,              // Number of vertices to render
+        288 as i32,              // Number of vertices to render
     );
 }
 

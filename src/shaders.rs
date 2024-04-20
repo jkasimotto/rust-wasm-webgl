@@ -4,6 +4,11 @@
 use wasm_bindgen::JsValue;
 use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader};
 
+pub fn create_shader_program(gl: &WebGlRenderingContext) -> Result<web_sys::WebGlProgram, JsValue> {
+    let program = create_program(&gl)?;
+    gl.use_program(Some(&program));
+    Ok(program)
+}
 // This function creates a shader program, which is a fundamental concept in WebGL.
 // A shader program consists of a vertex shader and a fragment shader.
 // The vertex shader processes each vertex of the geometry and determines its position on the screen.
@@ -12,59 +17,13 @@ pub fn create_program(gl: &WebGlRenderingContext) -> Result<WebGlProgram, JsValu
     let vert_shader = compile_shader(
         &gl,
         WebGlRenderingContext::VERTEX_SHADER,
-        r#"
-        attribute vec3 position;
-        attribute vec3 color;
-        uniform mat4 uMVMatrix;
-        uniform mat4 uPMatrix;
-        uniform float uScaleFactor;
-        varying vec3 vColor;
-        uniform bool uIsRenderingPoints;
-        uniform bool uIsRenderingCubes; // Add this line
-
-        void main() {
-            if (uIsRenderingCubes) {
-                // Apply scaling to the cube vertices based on the octree node's size
-                gl_Position = uPMatrix * uMVMatrix * vec4(position, 1.0);
-                vColor = color;
-            } else if (uIsRenderingPoints) {
-                gl_Position = uPMatrix * uMVMatrix * vec4(position, 1.0);
-                vColor = color;
-                gl_PointSize = 5.0 * uScaleFactor;
-            } else {
-                // Render XYZ axis lines
-                gl_Position = uPMatrix * uMVMatrix * vec4(position, 1.0);
-                vColor = color;
-            }
-        }
-        "#,
+        include_str!("shaders/vertex_shader.glsl"),
     )?;
 
     let frag_shader = compile_shader(
         &gl,
         WebGlRenderingContext::FRAGMENT_SHADER,
-        r#"
-        precision mediump float;
-
-        varying vec3 vColor;
-        uniform bool uIsRenderingPoints;
-        uniform bool uIsRenderingCubes; // Add this line
-        uniform float uCubeTransparency; // Add this line
-
-        void main() {
-            if (uIsRenderingPoints) {
-                float distance = length(gl_PointCoord - vec2(0.5, 0.5));
-                if (distance > 0.5) discard;
-                gl_FragColor = vec4(vColor, 1.0);
-            } else if (uIsRenderingCubes) {
-                // Set the transparency for the cubes
-                gl_FragColor = vec4(1.0,0.0,1.0, uCubeTransparency);
-            } else {
-                // Render XYZ axis lines
-                gl_FragColor = vec4(vColor, 1.0);
-            }
-        }
-        "#,
+        include_str!("shaders/fragment_shader.glsl"),
     )?;
 
     link_program(&gl, &vert_shader, &frag_shader)
@@ -115,13 +74,8 @@ fn link_program(
         .create_program()
         .ok_or_else(|| "Unable to create shader program".to_string())?;
 
-    // Attach the vertex shader to the program.
     gl.attach_shader(&program, vert_shader);
-
-    // Attach the fragment shader to the program.
     gl.attach_shader(&program, frag_shader);
-
-    // Link the shader program.
     gl.link_program(&program);
 
     // Check if the shader program linking was successful.
