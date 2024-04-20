@@ -13,12 +13,14 @@ pub fn render_scene(
     distance: f32,
     mouse_state: &MouseState,
     mv_matrix_values: &MVMatrixValues,
+    num_points: u32,
 ) {
     let mv_matrix = create_model_view_matrix(distance, mouse_state, mv_matrix_values);
     let p_matrix = create_projection_matrix();
     set_uniform_matrices(gl, program, &mv_matrix, &p_matrix);
     setup_rendering(gl);
-    gl.draw_arrays(WebGlRenderingContext::LINES, 0, 6);
+    gl.draw_arrays(WebGlRenderingContext::LINES, 0, 6); // Draw the XYZ axis lines
+    gl.draw_arrays(WebGlRenderingContext::POINTS, 6, num_points as i32); // Draw the random points
 }
 
 fn create_model_view_matrix(distance: f32, mouse_state: &MouseState, mv_matrix_values: &MVMatrixValues) -> nalgebra_glm::Mat4 {
@@ -65,6 +67,7 @@ pub fn start_render_loop(
     scale_factor: f32,
     mouse_state: Rc<RefCell<MouseState>>,
     mv_matrix_values: Rc<RefCell<MVMatrixValues>>,
+    num_points: u32
 ) {
     let scale_factor_ref = Rc::new(RefCell::new(scale_factor));
     let mouse_state_clone = mouse_state.clone();
@@ -86,6 +89,7 @@ pub fn start_render_loop(
         mouse_state_clone,
         render_loop,
         mv_matrix_values_clone,
+        num_points
     ));
 
     request_animation_frame(render_loop_clone);
@@ -153,12 +157,13 @@ fn create_render_loop_closure(
     mouse_state: Rc<RefCell<MouseState>>,
     render_loop: Rc<RefCell<Option<Closure<dyn FnMut()>>>>,
     mv_matrix_values: Rc<RefCell<MVMatrixValues>>,
+    num_points: u32
 ) -> Closure<dyn FnMut()> {
     Closure::wrap(Box::new(move || {
         let scale_factor = *scale_factor_ref.borrow();
         let mouse_state = mouse_state.borrow();
         let mv_matrix_values = mv_matrix_values.borrow();
-        render_scene(&gl, &program, scale_factor, &mouse_state, &mv_matrix_values);
+        render_scene(&gl, &program, scale_factor, &mouse_state, &mv_matrix_values, num_points);
         request_animation_frame(render_loop.clone());
     }) as Box<dyn FnMut()>)
 }

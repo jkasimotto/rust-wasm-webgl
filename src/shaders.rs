@@ -23,6 +23,7 @@ pub fn create_program(gl: &WebGlRenderingContext) -> Result<WebGlProgram, JsValu
         void main() {
             gl_Position = uPMatrix * uMVMatrix * vec4(position, 1.0);
             vColor = color;
+            gl_PointSize = 5.0;
         }
         "#,
     )?;

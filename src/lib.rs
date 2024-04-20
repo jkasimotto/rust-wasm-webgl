@@ -1,6 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use nalgebra_glm::{vec3, Vec3};
+use rand::Rng;
 use wasm_bindgen::prelude::*;
 use web_sys::WebGlRenderingContext;
 
@@ -31,7 +32,8 @@ pub fn start() -> Result<(), JsValue> {
     let program = create_shader_program(&gl)?;
 
     // Create a buffer to hold the vertex data
-    let buffer = create_vertex_buffer(&gl)?;
+    let num_points = 100; // Set the desired number of points
+    let buffer = create_vertex_buffer(&gl, num_points)?;
 
     // Get the location of the "position" and "color" attributes in the shader program
     let position_attribute_location = gl.get_attrib_location(&program, "position");
@@ -54,7 +56,7 @@ pub fn start() -> Result<(), JsValue> {
 
 
     // Start the rendering loop
-    render::start_render_loop(gl, program, scale_factor, mouse_state, mv_matrix_values);
+    render::start_render_loop(gl, program, scale_factor, mouse_state, mv_matrix_values, num_points);
 
     Ok(())
 }
@@ -77,15 +79,24 @@ fn create_shader_program(gl: &WebGlRenderingContext) -> Result<web_sys::WebGlPro
     Ok(program)
 }
 
-fn create_vertex_buffer(gl: &WebGlRenderingContext) -> Result<web_sys::WebGlBuffer, JsValue> {
-    let vertices: [f32; 36] = [
-        1.0, 0.0, 0.0,  1.0, 0.0, 0.0,  // x-axis (red)
-        -1.0, 0.0, 0.0,  1.0, 0.0, 0.0,
-        0.0, 1.0, 0.0,  0.0, 1.0, 0.0,  // y-axis (blue)
-        0.0, -1.0, 0.0,  0.0, 1.0, 0.0,
-        0.0, 0.0, 1.0,  0.0, 0.0, 1.0,  // z-axis (green)
-        0.0, 0.0, -1.0,  0.0, 0.0, 1.0,
+fn create_vertex_buffer(gl: &WebGlRenderingContext, num_points: u32) -> Result<web_sys::WebGlBuffer, JsValue> {
+    let mut vertices: Vec<f32> = vec![
+        1.0, 0.0, 0.0, 1.0, 0.0, 0.0, // x-axis (red)
+        -1.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0, 1.0, 0.0, // y-axis (blue)
+        0.0, -1.0, 0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0, 0.0, 0.0, 1.0, // z-axis (green)
+        0.0, 0.0, -1.0, 0.0, 0.0, 1.0,
     ];
+
+    // Generate random points within the XYZ axis lines
+    let mut rng = rand::thread_rng();
+    for _ in 0..num_points {
+        let x = rng.gen_range(-1.0..=1.0);
+        let y = rng.gen_range(-1.0..=1.0);
+        let z = rng.gen_range(-1.0..=1.0);
+        vertices.extend_from_slice(&[x, y, z, 0.0, 0.0, 0.0]); // Black color for points
+    }
 
     let buffer = gl.create_buffer().unwrap();
     gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buffer));
