@@ -20,11 +20,22 @@ pub fn create_program(gl: &WebGlRenderingContext) -> Result<WebGlProgram, JsValu
         uniform float uScaleFactor;
         varying vec3 vColor;
         uniform bool uIsRenderingPoints;
+        uniform bool uIsRenderingCubes; // Add this line
 
         void main() {
-            gl_Position = uPMatrix * uMVMatrix * vec4(position, 1.0);
-            vColor = color;
-            gl_PointSize = 5.0 * uScaleFactor;
+            if (uIsRenderingCubes) {
+                // Apply scaling to the cube vertices based on the octree node's size
+                gl_Position = uPMatrix * uMVMatrix * vec4(position, 1.0);
+                vColor = color;
+            } else if (uIsRenderingPoints) {
+                gl_Position = uPMatrix * uMVMatrix * vec4(position, 1.0);
+                vColor = color;
+                gl_PointSize = 5.0 * uScaleFactor;
+            } else {
+                // Render XYZ axis lines
+                gl_Position = uPMatrix * uMVMatrix * vec4(position, 1.0);
+                vColor = color;
+            }
         }
         "#,
     )?;
@@ -36,15 +47,22 @@ pub fn create_program(gl: &WebGlRenderingContext) -> Result<WebGlProgram, JsValu
         precision mediump float;
 
         varying vec3 vColor;
-        uniform bool uIsRenderingPoints; // Add this line
-
+        uniform bool uIsRenderingPoints;
+        uniform bool uIsRenderingCubes; // Add this line
+        uniform float uCubeTransparency; // Add this line
 
         void main() {
             if (uIsRenderingPoints) {
                 float distance = length(gl_PointCoord - vec2(0.5, 0.5));
                 if (distance > 0.5) discard;
+                gl_FragColor = vec4(vColor, 1.0);
+            } else if (uIsRenderingCubes) {
+                // Set the transparency for the cubes
+                gl_FragColor = vec4(1.0,0.0,1.0, uCubeTransparency);
+            } else {
+                // Render XYZ axis lines
+                gl_FragColor = vec4(vColor, 1.0);
             }
-            gl_FragColor = vec4(vColor, 1.0);
         }
         "#,
     )?;

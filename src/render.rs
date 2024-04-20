@@ -13,21 +13,56 @@ pub fn render_scene(
     mouse_state: &MouseState,
     mv_matrix_values: &MVMatrixValues,
     num_points: u32,
+    octree_vertex_count: u32,
 ) {
     let mv_matrix = create_model_view_matrix(distance, mouse_state, mv_matrix_values);
     let p_matrix = create_projection_matrix();
     set_uniform_matrices(gl, program, &mv_matrix, &p_matrix);
     setup_rendering(gl);
+
     let scale_factor_location = gl.get_uniform_location(&program, "uScaleFactor").unwrap();
+    let u_is_rendering_cubes = gl
+        .get_uniform_location(&program, "uIsRenderingCubes")
+        .unwrap();
+    let u_cube_transparency = gl
+        .get_uniform_location(&program, "uCubeTransparency")
+        .unwrap();
     gl.uniform1f(Some(&scale_factor_location), -distance);
-    let is_rendering_points_location = gl.get_uniform_location(&program, "uIsRenderingPoints").unwrap();
-    gl.uniform1f(Some(&is_rendering_points_location), 0.0); // Use 1.0 for true
-    gl.draw_arrays(WebGlRenderingContext::LINES, 0, 6); // Draw the XYZ axis lines
-    gl.uniform1f(Some(&is_rendering_points_location), 1.0); // Use 1.0 for true
-    gl.draw_arrays(WebGlRenderingContext::POINTS, 6, num_points as i32); // Draw the random points
+
+    let u_is_rendering_points = gl
+        .get_uniform_location(&program, "uIsRenderingPoints")
+        .unwrap();
+
+    // Render XYZ axis lines
+    gl.uniform1i(Some(&u_is_rendering_points), 0);
+    gl.uniform1i(Some(&u_is_rendering_cubes), 0);
+    gl.draw_arrays(WebGlRenderingContext::LINES, 0, 6);
+
+    // Render points
+    gl.uniform1i(Some(&u_is_rendering_points), 1);
+    gl.uniform1i(Some(&u_is_rendering_cubes), 0);
+    gl.draw_arrays(WebGlRenderingContext::POINTS, 6, num_points as i32);
+
+    // Render octree cubes
+    gl.uniform1i(Some(&u_is_rendering_points), 0);
+    gl.uniform1i(Some(&u_is_rendering_cubes), 1);
+    gl.uniform1f(Some(&u_cube_transparency), 0.3); // Set the desired transparency value
+
+    let vertices_per_cube = 24; // Each cube consists of 24 vertices (6 faces * 4 vertices per face)
+    let num_cubes = octree_vertex_count / vertices_per_cube;
+
+    gl.draw_arrays(
+        WebGlRenderingContext::TRIANGLES,
+        (6 + num_points) as i32, // Start offset (after the points)
+        72 as i32,              // Number of vertices to render
+    );
 }
 
-fn create_model_view_matrix(distance: f32, mouse_state: &MouseState, mv_matrix_values: &MVMatrixValues) -> nalgebra_glm::Mat4 {
+fn create_model_view_matrix(
+    distance: f32,
+    mouse_state: &MouseState,
+    mv_matrix_values: &MVMatrixValues,
+) -> nalgebra_glm::Mat4 {
     let mv_matrix = nalgebra_glm::Mat4::look_at_rh(
         &mv_matrix_values.eye.into(),
         &mv_matrix_values.target.into(),
@@ -63,6 +98,13 @@ fn setup_rendering(gl: &WebGlRenderingContext) {
     gl.line_width(2.0);
     gl.clear(WebGlRenderingContext::COLOR_BUFFER_BIT | WebGlRenderingContext::DEPTH_BUFFER_BIT);
     gl.enable(WebGlRenderingContext::DEPTH_TEST);
+
+     // Enable blending
+     gl.enable(WebGlRenderingContext::BLEND);
+     gl.blend_func(
+         WebGlRenderingContext::SRC_ALPHA,
+         WebGlRenderingContext::ONE_MINUS_SRC_ALPHA,
+     );
 }
 
 pub fn start_render_loop(
@@ -71,7 +113,8 @@ pub fn start_render_loop(
     scale_factor: f32,
     mouse_state: Rc<RefCell<MouseState>>,
     mv_matrix_values: Rc<RefCell<MVMatrixValues>>,
-    num_points: u32
+    num_points: u32,
+    num_cubes: u32,
 ) {
     let scale_factor_ref = Rc::new(RefCell::new(scale_factor));
     let mouse_state_clone = mouse_state.clone();
@@ -93,7 +136,8 @@ pub fn start_render_loop(
         mouse_state_clone,
         render_loop,
         mv_matrix_values_clone,
-        num_points
+        num_points,
+        num_cubes,
     ));
 
     request_animation_frame(render_loop_clone);
@@ -117,7 +161,9 @@ fn add_wheel_event_listener(wheel_handler: Closure<dyn FnMut(web_sys::WheelEvent
     wheel_handler.forget();
 }
 
-fn create_slider_handler(mv_matrix_values: Rc<RefCell<MVMatrixValues>>) -> Closure<dyn FnMut(web_sys::Event)> {
+fn create_slider_handler(
+    mv_matrix_values: Rc<RefCell<MVMatrixValues>>,
+) -> Closure<dyn FnMut(web_sys::Event)> {
     Closure::wrap(Box::new(move |event: web_sys::Event| {
         let target = event.target().unwrap();
         let input = target.dyn_ref::<web_sys::HtmlInputElement>().unwrap();
@@ -139,14 +185,17 @@ fn create_slider_handler(mv_matrix_values: Rc<RefCell<MVMatrixValues>>) -> Closu
     }) as Box<dyn FnMut(_)>)
 }
 
-
-
 fn add_slider_event_listener(slider_handler: Closure<dyn FnMut(web_sys::Event)>) {
     let window = web_sys::window().expect("No global window exists");
     let document = window.document().expect("Should have a document on window");
-    let slider_ids = ["eye-x", "eye-y", "eye-z", "target-x", "target-y", "target-z", "up-x", "up-y", "up-z"];
+    let slider_ids = [
+        "eye-x", "eye-y", "eye-z", "target-x", "target-y", "target-z", "up-x", "up-y", "up-z",
+    ];
     for slider_id in slider_ids.iter() {
-        let slider = document.query_selector(&format!("input[type=range][id={}]", slider_id)).unwrap().unwrap();
+        let slider = document
+            .query_selector(&format!("input[type=range][id={}]", slider_id))
+            .unwrap()
+            .unwrap();
         slider
             .add_event_listener_with_callback("input", slider_handler.as_ref().unchecked_ref())
             .unwrap();
@@ -161,13 +210,22 @@ fn create_render_loop_closure(
     mouse_state: Rc<RefCell<MouseState>>,
     render_loop: Rc<RefCell<Option<Closure<dyn FnMut()>>>>,
     mv_matrix_values: Rc<RefCell<MVMatrixValues>>,
-    num_points: u32
+    num_points: u32,
+    num_cubes: u32,
 ) -> Closure<dyn FnMut()> {
     Closure::wrap(Box::new(move || {
         let scale_factor = *scale_factor_ref.borrow();
         let mouse_state = mouse_state.borrow();
         let mv_matrix_values = mv_matrix_values.borrow();
-        render_scene(&gl, &program, scale_factor, &mouse_state, &mv_matrix_values, num_points);
+        render_scene(
+            &gl,
+            &program,
+            scale_factor,
+            &mouse_state,
+            &mv_matrix_values,
+            num_points,
+            num_cubes,
+        );
         request_animation_frame(render_loop.clone());
     }) as Box<dyn FnMut()>)
 }

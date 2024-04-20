@@ -27,5 +27,6 @@ features = [
     "WebGlUniformLocation",
     "Window",
     "MouseEvent",
-    "WheelEvent"
+    "WheelEvent",
+    "console"
 ]
