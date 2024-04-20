@@ -1,11 +1,10 @@
 // render.rs
-use web_sys::Document;
 use crate::mouse::MouseState;
 use crate::MVMatrixValues;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{WebGlProgram, WebGlRenderingContext, HtmlInputElement};
+use web_sys::{WebGlProgram, WebGlRenderingContext};
 
 pub fn render_scene(
     gl: &WebGlRenderingContext,
@@ -21,7 +20,10 @@ pub fn render_scene(
     setup_rendering(gl);
     let scale_factor_location = gl.get_uniform_location(&program, "uScaleFactor").unwrap();
     gl.uniform1f(Some(&scale_factor_location), -distance);
+    let is_rendering_points_location = gl.get_uniform_location(&program, "uIsRenderingPoints").unwrap();
+    gl.uniform1f(Some(&is_rendering_points_location), 0.0); // Use 1.0 for true
     gl.draw_arrays(WebGlRenderingContext::LINES, 0, 6); // Draw the XYZ axis lines
+    gl.uniform1f(Some(&is_rendering_points_location), 1.0); // Use 1.0 for true
     gl.draw_arrays(WebGlRenderingContext::POINTS, 6, num_points as i32); // Draw the random points
 }
 

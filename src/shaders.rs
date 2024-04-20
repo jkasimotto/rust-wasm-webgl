@@ -19,6 +19,7 @@ pub fn create_program(gl: &WebGlRenderingContext) -> Result<WebGlProgram, JsValu
         uniform mat4 uPMatrix;
         uniform float uScaleFactor;
         varying vec3 vColor;
+        uniform bool uIsRenderingPoints;
 
         void main() {
             gl_Position = uPMatrix * uMVMatrix * vec4(position, 1.0);
@@ -35,8 +36,14 @@ pub fn create_program(gl: &WebGlRenderingContext) -> Result<WebGlProgram, JsValu
         precision mediump float;
 
         varying vec3 vColor;
+        uniform bool uIsRenderingPoints; // Add this line
+
 
         void main() {
+            if (uIsRenderingPoints) {
+                float distance = length(gl_PointCoord - vec2(0.5, 0.5));
+                if (distance > 0.5) discard;
+            }
             gl_FragColor = vec4(vColor, 1.0);
         }
         "#,
