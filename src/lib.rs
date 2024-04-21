@@ -18,18 +18,34 @@ use octree::Octree;
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {
     let canvas = setup_canvas()?;
-    let gl = setup_webgl_context(&canvas)?;
-    let program = setup_shader_program(&gl)?;
+    let gl = webgl_utils::get_webgl_context(&canvas)?;
+    let program = shaders::create_shader_program(&gl)?;
+
     let mut octree = create_octree();
     let num_points = get_num_points_from_html()?;
-    let (buffer, octree_vertex_count) = setup_vertex_buffer(&gl, &mut octree, num_points)?;
+
+    let (axis_vbo, point_vbo, cube_vbo) =
+        vertex_buffer::create_vertex_buffers(&gl, num_points as u32, &mut octree)?;
     setup_vertex_attributes(&gl, &program);
+    let octree_vertex_count = octree.get_num_cubes() * 36; // Not using element arrays yet.
+
     let mouse_state = setup_mouse_state(&canvas)?;
     let mv_matrix_values = create_mv_matrix_values();
-    register_num_points_listener(gl.clone(), program.clone(), mouse_state.clone(), mv_matrix_values.clone())?;
+    register_num_points_listener(
+        gl.clone(),
+        program.clone(),
+        &axis_vbo,
+        &point_vbo,
+        &cube_vbo,
+        mouse_state.clone(),
+        mv_matrix_values.clone(),
+    )?;
     start_rendering(
         &gl,
         &program,
+        &axis_vbo,
+        &point_vbo,
+        &cube_vbo,
         mouse_state,
         mv_matrix_values,
         octree_vertex_count as u32,
@@ -51,15 +67,6 @@ fn setup_canvas() -> Result<web_sys::HtmlCanvasElement, JsValue> {
         .map_err(|_| JsValue::from_str("Could not convert canvas to HtmlCanvasElement"))
 }
 
-fn setup_webgl_context(
-    canvas: &web_sys::HtmlCanvasElement,
-) -> Result<WebGlRenderingContext, JsValue> {
-    webgl_utils::get_webgl_context(canvas)
-}
-
-fn setup_shader_program(gl: &WebGlRenderingContext) -> Result<web_sys::WebGlProgram, JsValue> {
-    shaders::create_shader_program(gl)
-}
 
 fn create_octree() -> Octree {
     Octree::new(Vec3::new(0.0, 0.0, 0.0), 2.0)
@@ -79,14 +86,6 @@ fn get_num_points_from_html() -> Result<i32, JsValue> {
     num_points_str
         .parse()
         .map_err(|_| JsValue::from_str("Invalid number of points"))
-}
-
-fn setup_vertex_buffer(
-    gl: &WebGlRenderingContext,
-    octree: &mut Octree,
-    num_points: i32,
-) -> Result<(web_sys::WebGlBuffer, i32), JsValue> {
-    vertex_buffer::create_vertex_buffer(gl, num_points as u32, octree)
 }
 
 fn setup_vertex_attributes(gl: &WebGlRenderingContext, program: &web_sys::WebGlProgram) {
@@ -115,6 +114,9 @@ fn create_mv_matrix_values() -> Rc<RefCell<MVMatrixValues>> {
 fn start_rendering(
     gl: &WebGlRenderingContext,
     program: &web_sys::WebGlProgram,
+    axis_vbo: &web_sys::WebGlBuffer,
+    point_vbo: &web_sys::WebGlBuffer,
+    cube_vbo: &web_sys::WebGlBuffer,
     mouse_state: Rc<RefCell<mouse::MouseState>>,
     mv_matrix_values: Rc<RefCell<MVMatrixValues>>,
     octree_vertex_count: u32,
@@ -124,6 +126,9 @@ fn start_rendering(
     render::start_render_loop(
         gl.clone(),
         program.clone(),
+        axis_vbo.clone(),
+        point_vbo.clone(),
+        cube_vbo.clone(),
         scale_factor,
         mouse_state,
         mv_matrix_values,
@@ -135,6 +140,9 @@ fn start_rendering(
 fn register_num_points_listener(
     gl: WebGlRenderingContext,
     program: web_sys::WebGlProgram,
+    axis_vbo: &web_sys::WebGlBuffer,
+    point_vbo: &web_sys::WebGlBuffer,
+    cube_vbo: &web_sys::WebGlBuffer,
     mouse_state: Rc<RefCell<mouse::MouseState>>,
     mv_matrix_values: Rc<RefCell<MVMatrixValues>>,
 ) -> Result<(), JsValue> {
@@ -177,13 +185,17 @@ fn update_num_points(
     num_points: i32,
 ) {
     let mut octree = create_octree();
-    let (buffer, octree_vertex_count) = setup_vertex_buffer(gl, &mut octree, num_points).unwrap();
+    let (axis_vbo, point_vbo, cube_vbo) = vertex_buffer::create_vertex_buffers(gl, num_points as u32, &mut octree).unwrap();
+    let octree_vertex_count = octree.get_num_cubes() * 36; // Not using element arrays yet.
     setup_vertex_attributes(gl, program);
 
     let scale_factor = 1.0;
     render::start_render_loop(
         gl.clone(),
         program.clone(),
+        axis_vbo.clone(),
+        point_vbo.clone(),
+        cube_vbo.clone(),
         scale_factor,
         mouse_state,
         mv_matrix_values,

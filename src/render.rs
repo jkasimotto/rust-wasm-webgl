@@ -9,6 +9,9 @@ use web_sys::{WebGlProgram, WebGlRenderingContext};
 pub fn render_scene(
     gl: &WebGlRenderingContext,
     program: &WebGlProgram,
+    axis_vbo: &web_sys::WebGlBuffer,
+    point_vbo: &web_sys::WebGlBuffer,
+    cube_vbo: &web_sys::WebGlBuffer,
     distance: f32,
     mouse_state: &MouseState,
     mv_matrix_values: &MVMatrixValues,
@@ -36,25 +39,78 @@ pub fn render_scene(
     // Render XYZ axis lines
     gl.uniform1i(Some(&u_is_rendering_points), 0);
     gl.uniform1i(Some(&u_is_rendering_cubes), 0);
+    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&axis_vbo));
+    gl.vertex_attrib_pointer_with_i32(
+        0,
+        3,
+        WebGlRenderingContext::FLOAT,
+        false,
+        6 * std::mem::size_of::<f32>() as i32,
+        0,
+    );
+    gl.enable_vertex_attrib_array(0);
+    gl.vertex_attrib_pointer_with_i32(
+        1,
+        3,
+        WebGlRenderingContext::FLOAT,
+        false,
+        6 * std::mem::size_of::<f32>() as i32,
+        3 * std::mem::size_of::<f32>() as i32,
+    );
+    gl.enable_vertex_attrib_array(1);
     gl.draw_arrays(WebGlRenderingContext::LINES, 0, 6);
 
     // Render points
     gl.uniform1i(Some(&u_is_rendering_points), 1);
     gl.uniform1i(Some(&u_is_rendering_cubes), 0);
-    gl.draw_arrays(WebGlRenderingContext::POINTS, 6, num_points as i32);
+    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&point_vbo));
+    gl.vertex_attrib_pointer_with_i32(
+        0,
+        3,
+        WebGlRenderingContext::FLOAT,
+        false,
+        6 * std::mem::size_of::<f32>() as i32,
+        0,
+    );
+    gl.enable_vertex_attrib_array(0);
+    gl.vertex_attrib_pointer_with_i32(
+        1,
+        3,
+        WebGlRenderingContext::FLOAT,
+        false,
+        6 * std::mem::size_of::<f32>() as i32,
+        3 * std::mem::size_of::<f32>() as i32,
+    );
+    gl.enable_vertex_attrib_array(1);
+    gl.draw_arrays(WebGlRenderingContext::POINTS, 0, num_points as i32);
 
     // Render octree cubes
     gl.uniform1i(Some(&u_is_rendering_points), 0);
     gl.uniform1i(Some(&u_is_rendering_cubes), 1);
     gl.uniform1f(Some(&u_cube_transparency), 0.3); // Set the desired transparency value
-
-    let vertices_per_cube = 24; // Each cube consists of 24 vertices (6 faces * 4 vertices per face)
-    let num_cubes = octree_vertex_count / vertices_per_cube;
-
+    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&cube_vbo));
+    gl.vertex_attrib_pointer_with_i32(
+        0,
+        3,
+        WebGlRenderingContext::FLOAT,
+        false,
+        6 * std::mem::size_of::<f32>() as i32,
+        0,
+    );
+    gl.enable_vertex_attrib_array(0);
+    gl.vertex_attrib_pointer_with_i32(
+        1,
+        3,
+        WebGlRenderingContext::FLOAT,
+        false,
+        6 * std::mem::size_of::<f32>() as i32,
+        3 * std::mem::size_of::<f32>() as i32,
+    );
+    gl.enable_vertex_attrib_array(1);
     gl.draw_arrays(
         WebGlRenderingContext::TRIANGLES,
-        (6 + num_points) as i32, // Start offset (after the points)
-        288 as i32,              // Number of vertices to render
+        0,
+        octree_vertex_count as i32,
     );
 }
 
@@ -99,17 +155,20 @@ fn setup_rendering(gl: &WebGlRenderingContext) {
     gl.clear(WebGlRenderingContext::COLOR_BUFFER_BIT | WebGlRenderingContext::DEPTH_BUFFER_BIT);
     gl.enable(WebGlRenderingContext::DEPTH_TEST);
 
-     // Enable blending
-     gl.enable(WebGlRenderingContext::BLEND);
-     gl.blend_func(
-         WebGlRenderingContext::SRC_ALPHA,
-         WebGlRenderingContext::ONE_MINUS_SRC_ALPHA,
-     );
+    // Enable blending
+    gl.enable(WebGlRenderingContext::BLEND);
+    gl.blend_func(
+        WebGlRenderingContext::SRC_ALPHA,
+        WebGlRenderingContext::ONE_MINUS_SRC_ALPHA,
+    );
 }
 
 pub fn start_render_loop(
     gl: WebGlRenderingContext,
     program: WebGlProgram,
+    axis_vbo: web_sys::WebGlBuffer,
+    point_vbo: web_sys::WebGlBuffer,
+    cube_vbo: web_sys::WebGlBuffer,
     scale_factor: f32,
     mouse_state: Rc<RefCell<MouseState>>,
     mv_matrix_values: Rc<RefCell<MVMatrixValues>>,
@@ -132,6 +191,9 @@ pub fn start_render_loop(
     *render_loop_clone.borrow_mut() = Some(create_render_loop_closure(
         gl,
         program,
+        axis_vbo,
+        point_vbo,
+        cube_vbo,
         scale_factor_ref,
         mouse_state_clone,
         render_loop,
@@ -206,6 +268,9 @@ fn add_slider_event_listener(slider_handler: Closure<dyn FnMut(web_sys::Event)>)
 fn create_render_loop_closure(
     gl: WebGlRenderingContext,
     program: WebGlProgram,
+    axis_vbo: web_sys::WebGlBuffer,
+    point_vbo: web_sys::WebGlBuffer,
+    cube_vbo: web_sys::WebGlBuffer,
     scale_factor_ref: Rc<RefCell<f32>>,
     mouse_state: Rc<RefCell<MouseState>>,
     render_loop: Rc<RefCell<Option<Closure<dyn FnMut()>>>>,
@@ -220,6 +285,9 @@ fn create_render_loop_closure(
         render_scene(
             &gl,
             &program,
+            &axis_vbo,
+            &point_vbo,
+            &cube_vbo,
             scale_factor,
             &mouse_state,
             &mv_matrix_values,

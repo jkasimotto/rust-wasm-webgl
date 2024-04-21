@@ -26,14 +26,38 @@ impl Octree {
 
         if self.children.is_none() {
             self.children = Some(Box::new([
-                Octree::new(self.center + Vec3::new(-self.size/4.0, -self.size/4.0, -self.size/4.0), self.size/2.0),
-                Octree::new(self.center + Vec3::new(self.size/4.0, -self.size/4.0, -self.size/4.0), self.size/2.0),
-                Octree::new(self.center + Vec3::new(-self.size/4.0, self.size/4.0, -self.size/4.0), self.size/2.0),
-                Octree::new(self.center + Vec3::new(self.size/4.0, self.size/4.0, -self.size/4.0), self.size/2.0),
-                Octree::new(self.center + Vec3::new(-self.size/4.0, -self.size/4.0, self.size/4.0), self.size/2.0),
-                Octree::new(self.center + Vec3::new(self.size/4.0, -self.size/4.0, self.size/4.0), self.size/2.0),
-                Octree::new(self.center + Vec3::new(-self.size/4.0, self.size/4.0, self.size/4.0), self.size/2.0),
-                Octree::new(self.center + Vec3::new(self.size/4.0, self.size/4.0, self.size/4.0), self.size/2.0),
+                Octree::new(
+                    self.center + Vec3::new(-self.size / 4.0, -self.size / 4.0, -self.size / 4.0),
+                    self.size / 2.0,
+                ),
+                Octree::new(
+                    self.center + Vec3::new(self.size / 4.0, -self.size / 4.0, -self.size / 4.0),
+                    self.size / 2.0,
+                ),
+                Octree::new(
+                    self.center + Vec3::new(-self.size / 4.0, self.size / 4.0, -self.size / 4.0),
+                    self.size / 2.0,
+                ),
+                Octree::new(
+                    self.center + Vec3::new(self.size / 4.0, self.size / 4.0, -self.size / 4.0),
+                    self.size / 2.0,
+                ),
+                Octree::new(
+                    self.center + Vec3::new(-self.size / 4.0, -self.size / 4.0, self.size / 4.0),
+                    self.size / 2.0,
+                ),
+                Octree::new(
+                    self.center + Vec3::new(self.size / 4.0, -self.size / 4.0, self.size / 4.0),
+                    self.size / 2.0,
+                ),
+                Octree::new(
+                    self.center + Vec3::new(-self.size / 4.0, self.size / 4.0, self.size / 4.0),
+                    self.size / 2.0,
+                ),
+                Octree::new(
+                    self.center + Vec3::new(self.size / 4.0, self.size / 4.0, self.size / 4.0),
+                    self.size / 2.0,
+                ),
             ]));
         }
 
@@ -43,9 +67,15 @@ impl Octree {
 
     fn get_child_index(&self, point: Vec3) -> usize {
         let mut index = 0;
-        if point.x > self.center.x { index += 1; }
-        if point.y > self.center.y { index += 2; }
-        if point.z > self.center.z { index += 4; }
+        if point.x > self.center.x {
+            index += 1;
+        }
+        if point.y > self.center.y {
+            index += 2;
+        }
+        if point.z > self.center.z {
+            index += 4;
+        }
         index
     }
 
@@ -65,73 +95,84 @@ impl Octree {
         let half_size = self.size / 2.0;
         let min_pos = self.center - Vec3::new(half_size, half_size, half_size);
         let max_pos = self.center + Vec3::new(half_size, half_size, half_size);
-    
+
         // Generate the vertices of the cube as triangles in counterclockwise order (when viewed from outside)
-    
+
         // Front face (counterclockwise)
         vertices.extend_from_slice(&[
             min_pos.x, min_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Bottom-left
             max_pos.x, min_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Bottom-right
             max_pos.x, max_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Top-right
-            
             min_pos.x, min_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Bottom-left
             max_pos.x, max_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Top-right
             min_pos.x, max_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Top-left
         ]);
-    
+
         // Back face (counterclockwise)
         vertices.extend_from_slice(&[
             max_pos.x, min_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Bottom-right
             min_pos.x, min_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Bottom-left
             min_pos.x, max_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Top-left
-            
             max_pos.x, min_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Bottom-right
             min_pos.x, max_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Top-left
             max_pos.x, max_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Top-right
         ]);
-    
+
         // Left face (counterclockwise)
         vertices.extend_from_slice(&[
             min_pos.x, min_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Bottom-left
             min_pos.x, min_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Bottom-right
             min_pos.x, max_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Top-right
-            
             min_pos.x, min_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Bottom-left
             min_pos.x, max_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Top-right
             min_pos.x, max_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Top-left
         ]);
-    
+
         // Right face (counterclockwise)
         vertices.extend_from_slice(&[
             max_pos.x, min_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Bottom-right
             max_pos.x, min_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Bottom-left
             max_pos.x, max_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Top-left
-            
             max_pos.x, min_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Bottom-right
             max_pos.x, max_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Top-left
             max_pos.x, max_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Top-right
         ]);
-    
+
         // Top face (counterclockwise)
         vertices.extend_from_slice(&[
             min_pos.x, max_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Front-left
             max_pos.x, max_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Front-right
             max_pos.x, max_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Back-right
-            
             min_pos.x, max_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Front-left
             max_pos.x, max_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Back-right
             min_pos.x, max_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Back-left
         ]);
-    
+
         // Bottom face (counterclockwise)
         vertices.extend_from_slice(&[
             min_pos.x, min_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Front-left
             max_pos.x, min_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Front-right
             max_pos.x, min_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Back-right
-            
             min_pos.x, min_pos.y, min_pos.z, 0.5, 0.5, 0.5, // Front-left
             max_pos.x, min_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Back-right
             min_pos.x, min_pos.y, max_pos.z, 0.5, 0.5, 0.5, // Back-left
         ]);
+    }
+    /// Returns the number of cubes in the octree.
+    /// This includes both leaf and non-leaf nodes.
+    pub fn get_num_cubes(&self) -> usize {
+        if self.children.is_none() {
+            // If there are no children, this is a leaf node, so return 1
+            1
+        } else {
+            // If there are children, count this node plus all children recursively
+            1 + self
+                .children
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|child| child.get_num_cubes())
+                .sum::<usize>()
+        }
     }
 }

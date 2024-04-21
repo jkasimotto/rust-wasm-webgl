@@ -5,17 +5,21 @@ use web_sys::WebGlRenderingContext;
 
 use crate::octree::Octree;
 
-pub fn create_vertex_buffer(
+pub fn create_vertex_buffers(
     gl: &WebGlRenderingContext,
     num_points: u32,
     octree: &mut Octree,
-) -> Result<(web_sys::WebGlBuffer, i32), JsValue> {
-    let mut vertices: Vec<f32> = vec![
+) -> Result<(web_sys::WebGlBuffer, web_sys::WebGlBuffer, web_sys::WebGlBuffer), JsValue> {
+    let axis_vertices: Vec<f32> = vec![
         1.0, 0.0, 0.0, 1.0, 0.0, 0.0, // x-axis (red)
-        -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, // y-axis (blue)
-        0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, // z-axis (green)
+        -1.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0, 1.0, 0.0, // y-axis (blue)
+        0.0, -1.0, 0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0, 0.0, 0.0, 1.0, // z-axis (green)
         0.0, 0.0, -1.0, 0.0, 0.0, 1.0,
     ];
+
+    let mut cloud_vertices: Vec<f32> = Vec::new();
 
     // Generate random points within the XYZ axis lines
     let mut rng = rand::thread_rng();
@@ -25,23 +29,37 @@ pub fn create_vertex_buffer(
         let z = rng.gen_range(-1.0..=1.0);
         let point = Vec3::new(x, y, z);
         octree.insert(point);
-        vertices.extend_from_slice(&[x, y, z, 0.0, 0.0, 0.0]); // Black color for points
+        cloud_vertices.extend_from_slice(&[x, y, z, 0.0, 0.0, 0.0]); // Black color for points
     }
 
-    // Calculate the number of octree cube vertices before adding them
-    let initial_vertex_count = vertices.len() as i32;
-    octree.get_vertices(&mut vertices);
-    let octree_vertex_count = vertices.len() as i32 - initial_vertex_count;
+    let mut cube_vertices: Vec<f32> = Vec::new();
+    octree.get_vertices(&mut cube_vertices);
 
-    let buffer = gl.create_buffer().unwrap();
-    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buffer));
+    let axis_buffer = gl.create_buffer().unwrap();
+    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&axis_buffer));
     gl.buffer_data_with_array_buffer_view(
         WebGlRenderingContext::ARRAY_BUFFER,
-        &js_sys::Float32Array::from(vertices.as_slice()),
+        &js_sys::Float32Array::from(axis_vertices.as_slice()),
         WebGlRenderingContext::STATIC_DRAW,
     );
 
-    Ok((buffer, octree_vertex_count))
+    let cloud_buffer = gl.create_buffer().unwrap();
+    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&cloud_buffer));
+    gl.buffer_data_with_array_buffer_view(
+        WebGlRenderingContext::ARRAY_BUFFER,
+        &js_sys::Float32Array::from(cloud_vertices.as_slice()),
+        WebGlRenderingContext::STATIC_DRAW,
+    );
+
+    let cube_buffer = gl.create_buffer().unwrap();
+    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&cube_buffer));
+    gl.buffer_data_with_array_buffer_view(
+        WebGlRenderingContext::ARRAY_BUFFER,
+        &js_sys::Float32Array::from(cube_vertices.as_slice()),
+        WebGlRenderingContext::STATIC_DRAW,
+    );
+
+    Ok((axis_buffer, cloud_buffer, cube_buffer))
 }
 
 pub fn set_vertex_attribute_pointer(
