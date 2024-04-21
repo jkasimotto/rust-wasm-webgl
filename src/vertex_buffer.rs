@@ -13,6 +13,10 @@ pub struct VertexData {
     pub cube_vbo: web_sys::WebGlBuffer,
     pub octree: Octree,
     pub num_points: u32,
+    pub draggable_point_vbo: web_sys::WebGlBuffer,
+    pub sphere_radius: f32,
+    pub sphere_vbo: web_sys::WebGlBuffer,
+    pub num_sphere_vertices: u32,
 }
 
 pub fn create_vertex_buffers(
@@ -23,11 +27,15 @@ pub fn create_vertex_buffers(
     let (point_vertices, point_indices) = generate_point_vertices(num_points);
     let mut cube_vertices: Vec<f32> = Vec::new();
     let octree = generate_octree(&point_vertices, &mut cube_vertices);
+    let draggable_point_vertex = vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+    let (sphere_vertices, num_sphere_vertices) = generate_sphere_vertices(&[0.0, 0.0, 0.0], 0.1);
 
     let axis_buffer = create_axis_vbo(gl, &axis_vertices)?;
     let cloud_buffer = create_point_vbo(gl, &point_vertices)?;
     let point_index_buffer = create_point_ebo(gl, &point_indices)?;
     let cube_buffer = create_cube_vbo(gl, &cube_vertices)?;
+    let draggable_point_buffer = create_draggable_point_vbo(gl, &draggable_point_vertex)?;
+    let sphere_buffer = create_sphere_vbo(gl, &sphere_vertices)?;
 
     Ok(VertexData {
         point_vbo: cloud_buffer,
@@ -36,6 +44,10 @@ pub fn create_vertex_buffers(
         cube_vbo: cube_buffer,
         octree: octree,
         num_points: num_points,
+        draggable_point_vbo: draggable_point_buffer,
+        sphere_radius: 0.1,
+        sphere_vbo: sphere_buffer,
+        num_sphere_vertices: num_sphere_vertices,
     })
 }
 
@@ -81,6 +93,36 @@ fn generate_octree(point_vertices: &[f32], cube_vertices: &mut Vec<f32>) -> Octr
     octree
 }
 
+pub fn generate_sphere_vertices(center: &[f32; 3], radius: f32) -> (Vec<f32>, u32) {
+    let mut sphere_vertices: Vec<f32> = Vec::new();
+    let sectors = 16;
+    let stacks = 16;
+
+    for i in 0..stacks + 1 {
+        let stack_angle =
+            std::f32::consts::PI / 2.0 - (i as f32) * std::f32::consts::PI / (stacks as f32);
+        let xy = radius * stack_angle.cos();
+        let z = radius * stack_angle.sin();
+
+        for j in 0..sectors + 1 {
+            let sector_angle = (j as f32) * 2.0 * std::f32::consts::PI / (sectors as f32);
+            let x = xy * sector_angle.cos();
+            let y = xy * sector_angle.sin();
+
+            sphere_vertices.extend_from_slice(&[
+                center[0] + x,
+                center[1] + y,
+                center[2] + z,
+                0.0,
+                1.0,
+                0.0,
+            ]);
+        }
+    }
+
+    (sphere_vertices, ((stacks + 1) * (sectors + 1)) as u32)
+}
+
 fn create_axis_vbo(gl: &WebGlRenderingContext, vertices: &[f32]) -> Result<WebGlBuffer, JsValue> {
     let buffer = gl.create_buffer().unwrap();
     gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buffer));
@@ -121,6 +163,30 @@ fn create_cube_vbo(gl: &WebGlRenderingContext, vertices: &[f32]) -> Result<WebGl
         WebGlRenderingContext::ARRAY_BUFFER,
         &js_sys::Float32Array::from(vertices),
         WebGlRenderingContext::STATIC_DRAW,
+    );
+    Ok(buffer)
+}
+pub fn create_draggable_point_vbo(
+    gl: &WebGlRenderingContext,
+    vertex: &[f32],
+) -> Result<WebGlBuffer, JsValue> {
+    let buffer = gl.create_buffer().unwrap();
+    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buffer));
+    gl.buffer_data_with_array_buffer_view(
+        WebGlRenderingContext::ARRAY_BUFFER,
+        &js_sys::Float32Array::from(vertex),
+        WebGlRenderingContext::DYNAMIC_DRAW,
+    );
+    Ok(buffer)
+}
+
+pub fn create_sphere_vbo(gl: &WebGlRenderingContext, vertices: &[f32]) -> Result<WebGlBuffer, JsValue> {
+    let buffer = gl.create_buffer().unwrap();
+    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buffer));
+    gl.buffer_data_with_array_buffer_view(
+        WebGlRenderingContext::ARRAY_BUFFER,
+        &js_sys::Float32Array::from(vertices),
+        WebGlRenderingContext::DYNAMIC_DRAW,
     );
     Ok(buffer)
 }

@@ -5,8 +5,10 @@ use web_sys::WebGlRenderingContext;
 
 use crate::{
     matrix::MVMatrixValues,
-    mouse, render,
-    vertex_buffer::{self, create_vertex_buffers, VertexData},
+    vertex_buffer::{
+        create_draggable_point_vbo, create_sphere_vbo, create_vertex_buffers,
+        generate_sphere_vertices, VertexData,
+    },
 };
 
 pub fn get_num_points_from_html() -> Result<i32, JsValue> {
@@ -128,4 +130,81 @@ pub fn add_num_points_event_listener(num_points_handler: Closure<dyn FnMut(web_s
         .unwrap();
 
     num_points_handler.forget();
+}
+
+pub fn create_xyz_handler(
+    gl: Rc<WebGlRenderingContext>,
+    vertex_data_ref: Rc<RefCell<VertexData>>,
+) -> Closure<dyn FnMut()> {
+    Closure::wrap(Box::new(move || {
+        let window = web_sys::window().expect("No global window exists");
+        let document = window.document().expect("Should have a document on window");
+
+        let get_input_value = |id: &str| {
+            let input = document
+                .query_selector(&format!("input[type=number][id={}]", id))
+                .unwrap()
+                .unwrap()
+                .dyn_into::<web_sys::HtmlInputElement>()
+                .unwrap();
+            input.value().parse::<f32>().unwrap()
+        };
+
+        let x = get_input_value("draggable-point-x");
+        let y = get_input_value("draggable-point-y");
+        let z = get_input_value("draggable-point-z");
+        let radius = get_input_value("draggable-point-radius");
+
+        let draggable_point_vertex = [x, y, z];
+
+        let draggable_point_buffer = match create_draggable_point_vbo(&gl, &draggable_point_vertex)
+        {
+            Ok(buffer) => buffer,
+            Err(err) => {
+                eprintln!("Error creating draggable point buffer: {:?}", err);
+                return;
+            }
+        };
+
+        let (sphere_vertices, num_sphere_vertices) = generate_sphere_vertices(&[x, y, z], radius);
+
+        let sphere_buffer = match create_sphere_vbo(&gl, &sphere_vertices) {
+            Ok(buffer) => buffer,
+            Err(err) => {
+                eprintln!("Error creating sphere buffer: {:?}", err);
+                return;
+            }
+        };
+
+        let mut vertex_data = vertex_data_ref.borrow_mut();
+        vertex_data.draggable_point_vbo = draggable_point_buffer;
+        vertex_data.sphere_radius = radius;
+        vertex_data.sphere_vbo = sphere_buffer;
+        vertex_data.num_sphere_vertices = num_sphere_vertices;
+    }) as Box<dyn FnMut()>)
+}
+
+pub fn add_xyz_event_listener(xyz_handler: Closure<dyn FnMut()>) {
+    let window = web_sys::window().expect("No global window exists");
+    let document = window.document().expect("Should have a document on window");
+
+    let input_ids = [
+        "draggable-point-x",
+        "draggable-point-y",
+        "draggable-point-z",
+        "draggable-point-radius",
+    ];
+
+    for input_id in input_ids.iter() {
+        let input = document
+            .query_selector(&format!("input[type=number][id={}]", input_id))
+            .unwrap()
+            .unwrap();
+
+        input
+            .add_event_listener_with_callback("input", xyz_handler.as_ref().unchecked_ref())
+            .unwrap();
+    }
+
+    xyz_handler.forget();
 }

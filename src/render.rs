@@ -1,9 +1,11 @@
 use crate::input::add_num_points_event_listener;
 use crate::input::add_slider_event_listener;
 use crate::input::add_wheel_event_listener;
+use crate::input::add_xyz_event_listener;
 use crate::input::create_num_points_handler;
 use crate::input::create_slider_handler;
 use crate::input::create_wheel_handler;
+use crate::input::create_xyz_handler;
 use crate::matrix::create_model_view_matrix;
 use crate::matrix::create_projection_matrix;
 use crate::matrix::set_uniform_matrices;
@@ -15,6 +17,7 @@ use crate::MVMatrixValues;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use web_sys::WebGlBuffer;
 use web_sys::{WebGlProgram, WebGlRenderingContext};
 
 pub fn render_scene(
@@ -27,6 +30,7 @@ pub fn render_scene(
 ) {
     let mv_matrix = create_model_view_matrix(distance, mouse_state, mv_matrix_values);
     let p_matrix = create_projection_matrix();
+
     set_uniform_matrices(gl, program, &mv_matrix, &p_matrix);
     setup_rendering(gl);
 
@@ -37,66 +41,64 @@ pub fn render_scene(
     let u_cube_transparency = gl
         .get_uniform_location(&program, "uCubeTransparency")
         .unwrap();
-    gl.uniform1f(Some(&scale_factor_location), -distance);
-
     let u_is_rendering_points = gl
         .get_uniform_location(&program, "uIsRenderingPoints")
         .unwrap();
+    let u_is_rendering_draggable_point = gl
+        .get_uniform_location(&program, "uIsRenderingDraggablePoint")
+        .unwrap();
+    let u_draggable_point_transparency = gl
+        .get_uniform_location(&program, "uDraggablePointTransparency")
+        .unwrap();
+    let u_is_rendering_sphere_surface = gl
+        .get_uniform_location(&program, "uIsRenderingSphereSurface")
+        .unwrap();
+    let u_sphere_surface_transparency = gl
+        .get_uniform_location(&program, "uSphereSurfaceTransparency")
+        .unwrap();
+
+    gl.uniform1f(Some(&scale_factor_location), -distance);
 
     let vertex_data_ref = vertex_data.clone();
+
+    fn bind_and_enable_attributes(gl: &WebGlRenderingContext, vbo: &WebGlBuffer) {
+        gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(vbo));
+
+        gl.vertex_attrib_pointer_with_i32(
+            0,
+            3,
+            WebGlRenderingContext::FLOAT,
+            false,
+            6 * std::mem::size_of::<f32>() as i32,
+            0,
+        );
+        gl.enable_vertex_attrib_array(0);
+
+        gl.vertex_attrib_pointer_with_i32(
+            1,
+            3,
+            WebGlRenderingContext::FLOAT,
+            false,
+            6 * std::mem::size_of::<f32>() as i32,
+            3 * std::mem::size_of::<f32>() as i32,
+        );
+        gl.enable_vertex_attrib_array(1);
+    }
 
     // Render XYZ axis lines
     gl.uniform1i(Some(&u_is_rendering_points), 0);
     gl.uniform1i(Some(&u_is_rendering_cubes), 0);
-    gl.bind_buffer(
-        WebGlRenderingContext::ARRAY_BUFFER,
-        Some(&vertex_data_ref.borrow().axis_vbo),
-    );
-    gl.vertex_attrib_pointer_with_i32(
-        0,
-        3,
-        WebGlRenderingContext::FLOAT,
-        false,
-        6 * std::mem::size_of::<f32>() as i32,
-        0,
-    );
-    gl.enable_vertex_attrib_array(0);
-    gl.vertex_attrib_pointer_with_i32(
-        1,
-        3,
-        WebGlRenderingContext::FLOAT,
-        false,
-        6 * std::mem::size_of::<f32>() as i32,
-        3 * std::mem::size_of::<f32>() as i32,
-    );
-    gl.enable_vertex_attrib_array(1);
+    gl.uniform1i(Some(&u_is_rendering_draggable_point), 0);
+    gl.uniform1i(Some(&u_is_rendering_sphere_surface), 0);
+    bind_and_enable_attributes(gl, &vertex_data_ref.borrow().axis_vbo);
     gl.draw_arrays(WebGlRenderingContext::LINES, 0, 6);
 
     // Render points
     gl.uniform1i(Some(&u_is_rendering_points), 1);
     gl.uniform1i(Some(&u_is_rendering_cubes), 0);
-    gl.bind_buffer(
-        WebGlRenderingContext::ARRAY_BUFFER,
-        Some(&vertex_data_ref.borrow().point_vbo),
-    );
-    gl.vertex_attrib_pointer_with_i32(
-        0,
-        3,
-        WebGlRenderingContext::FLOAT,
-        false,
-        6 * std::mem::size_of::<f32>() as i32,
-        0,
-    );
-    gl.enable_vertex_attrib_array(0);
-    gl.vertex_attrib_pointer_with_i32(
-        1,
-        3,
-        WebGlRenderingContext::FLOAT,
-        false,
-        6 * std::mem::size_of::<f32>() as i32,
-        3 * std::mem::size_of::<f32>() as i32,
-    );
-    gl.enable_vertex_attrib_array(1);
+    gl.uniform1i(Some(&u_is_rendering_draggable_point), 0);
+    gl.uniform1i(Some(&u_is_rendering_sphere_surface), 0);
+    bind_and_enable_attributes(gl, &vertex_data_ref.borrow().point_vbo);
     gl.draw_arrays(
         WebGlRenderingContext::POINTS,
         0,
@@ -106,33 +108,36 @@ pub fn render_scene(
     // Render octree cubes
     gl.uniform1i(Some(&u_is_rendering_points), 0);
     gl.uniform1i(Some(&u_is_rendering_cubes), 1);
+    gl.uniform1i(Some(&u_is_rendering_draggable_point), 0);
+    gl.uniform1i(Some(&u_is_rendering_sphere_surface), 0);
     gl.uniform1f(Some(&u_cube_transparency), 0.3); // Set the desired transparency value
-    gl.bind_buffer(
-        WebGlRenderingContext::ARRAY_BUFFER,
-        Some(&vertex_data_ref.borrow().cube_vbo),
-    );
-    gl.vertex_attrib_pointer_with_i32(
-        0,
-        3,
-        WebGlRenderingContext::FLOAT,
-        false,
-        6 * std::mem::size_of::<f32>() as i32,
-        0,
-    );
-    gl.enable_vertex_attrib_array(0);
-    gl.vertex_attrib_pointer_with_i32(
-        1,
-        3,
-        WebGlRenderingContext::FLOAT,
-        false,
-        6 * std::mem::size_of::<f32>() as i32,
-        3 * std::mem::size_of::<f32>() as i32,
-    );
-    gl.enable_vertex_attrib_array(1);
+    bind_and_enable_attributes(gl, &vertex_data_ref.borrow().cube_vbo);
     gl.draw_arrays(
         WebGlRenderingContext::TRIANGLES,
         0,
         vertex_data_ref.borrow().octree.get_num_cubes() as i32 * 36,
+    );
+
+    // Render draggable point
+    gl.uniform1i(Some(&u_is_rendering_points), 0);
+    gl.uniform1i(Some(&u_is_rendering_cubes), 0);
+    gl.uniform1i(Some(&u_is_rendering_draggable_point), 1);
+    gl.uniform1i(Some(&u_is_rendering_sphere_surface), 0);
+    gl.uniform1f(Some(&u_draggable_point_transparency), 1.0); // Set the desired transparency value
+    bind_and_enable_attributes(gl, &vertex_data_ref.borrow().draggable_point_vbo);
+    gl.draw_arrays(WebGlRenderingContext::POINTS, 0, 1);
+
+    // Render sphere surface
+    gl.uniform1i(Some(&u_is_rendering_points), 0);
+    gl.uniform1i(Some(&u_is_rendering_cubes), 0);
+    gl.uniform1i(Some(&u_is_rendering_draggable_point), 0);
+    gl.uniform1i(Some(&u_is_rendering_sphere_surface), 1);
+    gl.uniform1f(Some(&u_sphere_surface_transparency), 1.0); // Set the desired transparency value
+    bind_and_enable_attributes(gl, &vertex_data_ref.borrow().sphere_vbo);
+    gl.draw_arrays(
+        WebGlRenderingContext::TRIANGLES,
+        0,
+        vertex_data_ref.borrow().num_sphere_vertices as i32,
     );
 }
 
@@ -173,6 +178,9 @@ pub fn start_render_loop(
 
     let num_points_handler = create_num_points_handler(gl.clone(), vertex_data.clone());
     add_num_points_event_listener(num_points_handler);
+
+    let xyz_handler = create_xyz_handler(gl.clone(), vertex_data.clone());
+    add_xyz_event_listener(xyz_handler);
 
     *render_loop_clone.borrow_mut() = Some(create_render_loop_closure(
         gl.clone(),
