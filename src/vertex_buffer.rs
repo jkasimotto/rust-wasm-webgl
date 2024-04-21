@@ -11,6 +11,7 @@ pub struct VertexData {
     pub point_ebo: web_sys::WebGlBuffer,
     pub axis_vbo: web_sys::WebGlBuffer,
     pub cube_vbo: web_sys::WebGlBuffer,
+    pub point_vertices: Vec<f32>,
     pub octree: Octree,
     pub num_points: u32,
     pub draggable_point_vbo: web_sys::WebGlBuffer,
@@ -42,6 +43,7 @@ pub fn create_vertex_buffers(
         point_ebo: point_index_buffer,
         axis_vbo: axis_buffer,
         cube_vbo: cube_buffer,
+        point_vertices: point_vertices,
         octree: octree,
         num_points: num_points,
         draggable_point_vbo: draggable_point_buffer,
@@ -146,7 +148,7 @@ fn create_point_vbo(gl: &WebGl2RenderingContext, vertices: &[f32]) -> Result<Web
     Ok(buffer)
 }
 
-fn create_point_ebo(gl: &WebGl2RenderingContext, indices: &[u32]) -> Result<WebGlBuffer, JsValue> {
+pub fn create_point_ebo(gl: &WebGl2RenderingContext, indices: &[u32]) -> Result<WebGlBuffer, JsValue> {
     let buffer = gl.create_buffer().unwrap();
     gl.bind_buffer(WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER, Some(&buffer));
     gl.buffer_data_with_array_buffer_view(

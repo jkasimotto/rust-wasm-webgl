@@ -113,6 +113,9 @@ pub fn render_scene(
         Some(&vertex_data_ref.borrow().point_ebo),
     );
 
+
+    web_sys::console::log_1(&JsValue::from(vertex_data_ref.borrow().num_points));
+
     gl.draw_elements_with_i32(
         WebGl2RenderingContext::POINTS,
         vertex_data_ref.borrow().num_points as i32,

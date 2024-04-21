@@ -1,13 +1,13 @@
 use std::{cell::RefCell, rc::Rc};
 
+use nalgebra_glm::Vec3;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use web_sys::WebGl2RenderingContext;
 
 use crate::{
     matrix::MVMatrixValues,
     vertex_buffer::{
-        create_draggable_point_vbo, create_sphere_vbo, create_vertex_buffers,
-        generate_sphere_vertices, VertexData,
+        create_draggable_point_vbo, create_point_ebo, create_sphere_vbo, create_vertex_buffers, generate_sphere_vertices, VertexData
     },
 };
 
@@ -179,6 +179,21 @@ pub fn create_xyz_handler(
         vertex_data.sphere_radius = radius;
         vertex_data.sphere_vbo = sphere_buffer;
         vertex_data.num_sphere_vertices = num_sphere_vertices;
+
+        // Update the point EBO based on the sphere radius
+        let octree = &vertex_data.octree;
+        let points_within_sphere = octree.query_sphere(&Vec3::new(x, y, z), radius, &vertex_data.point_vertices);
+        let point_indices: Vec<u32> = points_within_sphere.iter().map(|&i| i as u32).collect();
+        vertex_data.num_points = point_indices.len() as u32;
+
+        let point_ebo = match create_point_ebo(&gl, &point_indices) {
+            Ok(buffer) => buffer,
+            Err(err) => {
+                eprintln!("Error creating point EBO: {:?}", err);
+                return;
+            }
+        };
+        vertex_data.point_ebo = point_ebo;
     }) as Box<dyn FnMut()>)
 }
 

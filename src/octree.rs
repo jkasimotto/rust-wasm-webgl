@@ -5,7 +5,7 @@ use nalgebra_glm::Vec3;
 pub struct Octree {
     center: Vec3,
     size: f32,
-    point_indices: Vec<usize>, 
+    point_indices: Vec<usize>,
     children: Option<Box<[Octree; 8]>>,
 }
 
@@ -177,5 +177,51 @@ impl Octree {
                 .map(|child| child.get_num_cubes())
                 .sum::<usize>()
         }
+    }
+
+    pub fn query_sphere(&self, center: &Vec3, radius: f32, vertex_points: &[f32]) -> Vec<usize> {
+        let mut point_indices = Vec::new();
+
+        if !self.intersects_sphere(center, radius) {
+            return point_indices;
+        }
+
+        if self.children.is_none() {
+            for &point_index in &self.point_indices {
+                // Each vertex point consists of 6 values: x, y, z, r, g, b
+                // Calculate the offset to access the x, y, z values of the point
+                let offset = point_index * 6;
+                let point = Vec3::new(
+                    vertex_points[offset],
+                    vertex_points[offset + 1],
+                    vertex_points[offset + 2],
+                );
+
+                if nalgebra_glm::distance(&point, center) <= radius {
+                    point_indices.push(point_index);
+                }
+            }
+        } else {
+            for child in self.children.as_ref().unwrap().iter() {
+                point_indices.extend(child.query_sphere(center, radius, vertex_points));
+            }
+        }
+
+        point_indices
+    }
+
+
+    fn intersects_sphere(&self, center: &Vec3, radius: f32) -> bool {
+        let half_size = self.size / 2.0;
+        let min_pos = self.center - Vec3::new(half_size, half_size, half_size);
+        let max_pos = self.center + Vec3::new(half_size, half_size, half_size);
+
+        let closest_point = Vec3::new(
+            center.x.clamp(min_pos.x, max_pos.x),
+            center.y.clamp(min_pos.y, max_pos.y),
+            center.z.clamp(min_pos.z, max_pos.z),
+        );
+
+        nalgebra_glm::distance(&closest_point, center) <= radius
     }
 }
