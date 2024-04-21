@@ -5,7 +5,7 @@ use nalgebra_glm::Vec3;
 pub struct Octree {
     center: Vec3,
     size: f32,
-    points: Vec<Vec3>,
+    point_indices: Vec<usize>, 
     children: Option<Box<[Octree; 8]>>,
 }
 
@@ -14,14 +14,16 @@ impl Octree {
         Octree {
             center,
             size,
-            points: Vec::new(),
+            point_indices: Vec::new(),
             children: None,
         }
     }
 
-    pub fn insert(&mut self, point: Vec3) {
+    // Adjust the insert method to accept a point index and the point itself
+    // The point is needed to determine the correct child, but only the index is stored
+    pub fn insert(&mut self, point_index: usize, point: Vec3) {
         if self.size <= 1.0 {
-            self.points.push(point);
+            self.point_indices.push(point_index);
             return;
         }
 
@@ -63,7 +65,7 @@ impl Octree {
         }
 
         let child_index = self.get_child_index(point);
-        self.children.as_mut().unwrap()[child_index].insert(point);
+        self.children.as_mut().unwrap()[child_index].insert(point_index, point);
     }
 
     fn get_child_index(&self, point: Vec3) -> usize {

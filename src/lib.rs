@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use input::get_num_points_from_html;
 use nalgebra_glm::vec3;
 use wasm_bindgen::prelude::*;
-use web_sys::WebGlRenderingContext;
+use web_sys::WebGl2RenderingContext;
 
 mod input;
 mod matrix;
@@ -38,7 +38,7 @@ pub fn start() -> Result<(), JsValue> {
 
 fn setup() -> Result<
     (
-        WebGlRenderingContext,
+        WebGl2RenderingContext,
         web_sys::WebGlProgram,
         Rc<RefCell<mouse::MouseState>>,
         Rc<RefCell<MVMatrixValues>>,

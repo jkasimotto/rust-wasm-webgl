@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
-use web_sys::WebGlRenderingContext;
+use web_sys::WebGl2RenderingContext;
 
 use crate::{
     matrix::MVMatrixValues,
@@ -88,7 +88,7 @@ pub fn add_wheel_event_listener(wheel_handler: Closure<dyn FnMut(web_sys::WheelE
 }
 
 pub fn create_num_points_handler(
-    gl: Rc<WebGlRenderingContext>,
+    gl: Rc<WebGl2RenderingContext>,
     vertex_data_ref: Rc<RefCell<VertexData>>,
 ) -> Closure<dyn FnMut(web_sys::Event)> {
     Closure::wrap(Box::new(move |event: web_sys::Event| {
@@ -96,8 +96,6 @@ pub fn create_num_points_handler(
         let input = target.dyn_ref::<web_sys::HtmlInputElement>().unwrap();
         let num_points = input.value().parse::<u32>().unwrap();
 
-        // TODO: console log num points
-        web_sys::console::log_1(&JsValue::from_str(&format!("Num points: {:?}", num_points)));
 
         let new_vertex_data = match create_vertex_buffers(&gl, num_points) {
             Ok(data) => data,
@@ -133,7 +131,7 @@ pub fn add_num_points_event_listener(num_points_handler: Closure<dyn FnMut(web_s
 }
 
 pub fn create_xyz_handler(
-    gl: Rc<WebGlRenderingContext>,
+    gl: Rc<WebGl2RenderingContext>,
     vertex_data_ref: Rc<RefCell<VertexData>>,
 ) -> Closure<dyn FnMut()> {
     Closure::wrap(Box::new(move || {

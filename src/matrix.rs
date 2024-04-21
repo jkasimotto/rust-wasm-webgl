@@ -1,5 +1,5 @@
 use nalgebra_glm::Vec3;
-use web_sys::{WebGlProgram, WebGlRenderingContext};
+use web_sys::{WebGlProgram, WebGl2RenderingContext};
 
 use crate::mouse::MouseState;
 
@@ -33,7 +33,7 @@ pub fn create_projection_matrix() -> nalgebra_glm::Mat4 {
 }
 
 pub fn set_uniform_matrices(
-    gl: &WebGlRenderingContext,
+    gl: &WebGl2RenderingContext,
     program: &WebGlProgram,
     mv_matrix: &nalgebra_glm::Mat4,
     p_matrix: &nalgebra_glm::Mat4,

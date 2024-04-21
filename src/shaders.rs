@@ -2,9 +2,9 @@
 // wasm_bindgen is a library that facilitates interoperability between Rust and JavaScript.
 // web_sys is a crate that provides bindings for Web APIs, including WebGL.
 use wasm_bindgen::JsValue;
-use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader};
+use web_sys::{WebGlProgram, WebGl2RenderingContext, WebGlShader};
 
-pub fn create_shader_program(gl: &WebGlRenderingContext) -> Result<web_sys::WebGlProgram, JsValue> {
+pub fn create_shader_program(gl: &WebGl2RenderingContext) -> Result<web_sys::WebGlProgram, JsValue> {
     let program = create_program(&gl)?;
     gl.use_program(Some(&program));
     Ok(program)
@@ -13,16 +13,16 @@ pub fn create_shader_program(gl: &WebGlRenderingContext) -> Result<web_sys::WebG
 // A shader program consists of a vertex shader and a fragment shader.
 // The vertex shader processes each vertex of the geometry and determines its position on the screen.
 // The fragment shader determines the color of each pixel that makes up the geometry.
-pub fn create_program(gl: &WebGlRenderingContext) -> Result<WebGlProgram, JsValue> {
+pub fn create_program(gl: &WebGl2RenderingContext) -> Result<WebGlProgram, JsValue> {
     let vert_shader = compile_shader(
         &gl,
-        WebGlRenderingContext::VERTEX_SHADER,
+        WebGl2RenderingContext::VERTEX_SHADER,
         include_str!("shaders/vertex_shader.glsl"),
     )?;
 
     let frag_shader = compile_shader(
         &gl,
-        WebGlRenderingContext::FRAGMENT_SHADER,
+        WebGl2RenderingContext::FRAGMENT_SHADER,
         include_str!("shaders/fragment_shader.glsl"),
     )?;
 
@@ -31,7 +31,7 @@ pub fn create_program(gl: &WebGlRenderingContext) -> Result<WebGlProgram, JsValu
 // This function compiles a shader from its source code.
 // It takes the WebGL rendering context, the shader type (vertex or fragment), and the shader source code as input.
 fn compile_shader(
-    gl: &WebGlRenderingContext,
+    gl: &WebGl2RenderingContext,
     shader_type: u32,
     source: &str,
 ) -> Result<WebGlShader, JsValue> {
@@ -49,7 +49,7 @@ fn compile_shader(
     // Check if the shader compilation was successful.
     // Rust's Result type is used for error handling. Ok is returned if the compilation succeeded, and Err is returned if it failed.
     if gl
-        .get_shader_parameter(&shader, WebGlRenderingContext::COMPILE_STATUS)
+        .get_shader_parameter(&shader, WebGl2RenderingContext::COMPILE_STATUS)
         .as_bool()
         .unwrap_or(false)
     {
@@ -65,7 +65,7 @@ fn compile_shader(
 // This function links the compiled vertex and fragment shaders into a shader program.
 // Linking combines the shaders into a single program that can be used for rendering.
 fn link_program(
-    gl: &WebGlRenderingContext,
+    gl: &WebGl2RenderingContext,
     vert_shader: &WebGlShader,
     frag_shader: &WebGlShader,
 ) -> Result<WebGlProgram, JsValue> {
@@ -81,7 +81,7 @@ fn link_program(
     // Check if the shader program linking was successful.
     // Rust's Result type is used for error handling. Ok is returned if the linking succeeded, and Err is returned if it failed.
     if gl
-        .get_program_parameter(&program, WebGlRenderingContext::LINK_STATUS)
+        .get_program_parameter(&program, WebGl2RenderingContext::LINK_STATUS)
         .as_bool()
         .unwrap_or(false)
     {
