@@ -1,6 +1,7 @@
 // octree.rs
 use nalgebra_glm::Vec3;
 
+#[derive(Clone)] // Add this line
 pub struct Octree {
     center: Vec3,
     size: f32,

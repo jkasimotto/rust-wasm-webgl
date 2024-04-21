@@ -5,6 +5,22 @@ use web_sys::WebGlRenderingContext;
 
 use crate::{matrix::MVMatrixValues, mouse};
 
+pub fn get_num_points_from_html() -> Result<i32, JsValue> {
+    let window = web_sys::window().ok_or("No global `window` exists")?;
+    let document = window
+        .document()
+        .ok_or("Should have a document on window")?;
+    let num_points_input = document
+        .get_element_by_id("num-points")
+        .ok_or("Can't find num-points input element")?;
+    let num_points_str = num_points_input
+        .dyn_into::<web_sys::HtmlInputElement>()?
+        .value();
+    num_points_str
+        .parse()
+        .map_err(|_| JsValue::from_str("Invalid number of points"))
+}
+
 pub fn register_num_points_listener(
     gl: WebGlRenderingContext,
     program: web_sys::WebGlProgram,

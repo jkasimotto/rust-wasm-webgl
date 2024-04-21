@@ -1,6 +1,7 @@
 // render.rs
 use crate::mouse::MouseState;
 use crate::MVMatrixValues;
+use crate::vertex_buffer::VertexData;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -9,14 +10,11 @@ use web_sys::{WebGlProgram, WebGlRenderingContext};
 pub fn render_scene(
     gl: &WebGlRenderingContext,
     program: &WebGlProgram,
-    axis_vbo: &web_sys::WebGlBuffer,
-    point_vbo: &web_sys::WebGlBuffer,
-    cube_vbo: &web_sys::WebGlBuffer,
+    vertex_data: &VertexData,
     distance: f32,
     mouse_state: &MouseState,
     mv_matrix_values: &MVMatrixValues,
     num_points: u32,
-    octree_vertex_count: u32,
 ) {
     let mv_matrix = create_model_view_matrix(distance, mouse_state, mv_matrix_values);
     let p_matrix = create_projection_matrix();
@@ -39,7 +37,7 @@ pub fn render_scene(
     // Render XYZ axis lines
     gl.uniform1i(Some(&u_is_rendering_points), 0);
     gl.uniform1i(Some(&u_is_rendering_cubes), 0);
-    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&axis_vbo));
+    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&vertex_data.axis_vbo));
     gl.vertex_attrib_pointer_with_i32(
         0,
         3,
@@ -63,7 +61,7 @@ pub fn render_scene(
     // Render points
     gl.uniform1i(Some(&u_is_rendering_points), 1);
     gl.uniform1i(Some(&u_is_rendering_cubes), 0);
-    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&point_vbo));
+    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&vertex_data.point_vbo));
     gl.vertex_attrib_pointer_with_i32(
         0,
         3,
@@ -88,7 +86,7 @@ pub fn render_scene(
     gl.uniform1i(Some(&u_is_rendering_points), 0);
     gl.uniform1i(Some(&u_is_rendering_cubes), 1);
     gl.uniform1f(Some(&u_cube_transparency), 0.3); // Set the desired transparency value
-    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&cube_vbo));
+    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&vertex_data.cube_vbo));
     gl.vertex_attrib_pointer_with_i32(
         0,
         3,
@@ -110,7 +108,7 @@ pub fn render_scene(
     gl.draw_arrays(
         WebGlRenderingContext::TRIANGLES,
         0,
-        octree_vertex_count as i32,
+        vertex_data.octree.get_num_cubes() as i32 * 36,
     );
 }
 
@@ -166,14 +164,11 @@ fn setup_rendering(gl: &WebGlRenderingContext) {
 pub fn start_render_loop(
     gl: WebGlRenderingContext,
     program: WebGlProgram,
-    axis_vbo: web_sys::WebGlBuffer,
-    point_vbo: web_sys::WebGlBuffer,
-    cube_vbo: web_sys::WebGlBuffer,
+    vertex_data: VertexData,
     scale_factor: f32,
     mouse_state: Rc<RefCell<MouseState>>,
     mv_matrix_values: Rc<RefCell<MVMatrixValues>>,
     num_points: u32,
-    num_cubes: u32,
 ) {
     let scale_factor_ref = Rc::new(RefCell::new(scale_factor));
     let mouse_state_clone = mouse_state.clone();
@@ -191,15 +186,12 @@ pub fn start_render_loop(
     *render_loop_clone.borrow_mut() = Some(create_render_loop_closure(
         gl,
         program,
-        axis_vbo,
-        point_vbo,
-        cube_vbo,
+        vertex_data,
         scale_factor_ref,
         mouse_state_clone,
         render_loop,
         mv_matrix_values_clone,
         num_points,
-        num_cubes,
     ));
 
     request_animation_frame(render_loop_clone);
@@ -268,15 +260,12 @@ fn add_slider_event_listener(slider_handler: Closure<dyn FnMut(web_sys::Event)>)
 fn create_render_loop_closure(
     gl: WebGlRenderingContext,
     program: WebGlProgram,
-    axis_vbo: web_sys::WebGlBuffer,
-    point_vbo: web_sys::WebGlBuffer,
-    cube_vbo: web_sys::WebGlBuffer,
+    vertex_data: VertexData,
     scale_factor_ref: Rc<RefCell<f32>>,
     mouse_state: Rc<RefCell<MouseState>>,
     render_loop: Rc<RefCell<Option<Closure<dyn FnMut()>>>>,
     mv_matrix_values: Rc<RefCell<MVMatrixValues>>,
     num_points: u32,
-    num_cubes: u32,
 ) -> Closure<dyn FnMut()> {
     Closure::wrap(Box::new(move || {
         let scale_factor = *scale_factor_ref.borrow();
@@ -285,14 +274,11 @@ fn create_render_loop_closure(
         render_scene(
             &gl,
             &program,
-            &axis_vbo,
-            &point_vbo,
-            &cube_vbo,
+            &vertex_data,
             scale_factor,
             &mouse_state,
             &mv_matrix_values,
             num_points,
-            num_cubes,
         );
         request_animation_frame(render_loop.clone());
     }) as Box<dyn FnMut()>)
