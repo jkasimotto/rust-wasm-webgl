@@ -1,7 +1,17 @@
+use crate::input::add_num_points_event_listener;
+use crate::input::add_slider_event_listener;
+use crate::input::add_wheel_event_listener;
+use crate::input::create_num_points_handler;
+use crate::input::create_slider_handler;
+use crate::input::create_wheel_handler;
+use crate::matrix::create_model_view_matrix;
+use crate::matrix::create_projection_matrix;
+use crate::matrix::set_uniform_matrices;
 // render.rs
 use crate::mouse::MouseState;
-use crate::MVMatrixValues;
+
 use crate::vertex_buffer::VertexData;
+use crate::MVMatrixValues;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -10,11 +20,10 @@ use web_sys::{WebGlProgram, WebGlRenderingContext};
 pub fn render_scene(
     gl: &WebGlRenderingContext,
     program: &WebGlProgram,
-    vertex_data: &VertexData,
+    vertex_data: Rc<RefCell<VertexData>>,
     distance: f32,
     mouse_state: &MouseState,
     mv_matrix_values: &MVMatrixValues,
-    num_points: u32,
 ) {
     let mv_matrix = create_model_view_matrix(distance, mouse_state, mv_matrix_values);
     let p_matrix = create_projection_matrix();
@@ -34,10 +43,15 @@ pub fn render_scene(
         .get_uniform_location(&program, "uIsRenderingPoints")
         .unwrap();
 
+    let vertex_data_ref = vertex_data.clone();
+
     // Render XYZ axis lines
     gl.uniform1i(Some(&u_is_rendering_points), 0);
     gl.uniform1i(Some(&u_is_rendering_cubes), 0);
-    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&vertex_data.axis_vbo));
+    gl.bind_buffer(
+        WebGlRenderingContext::ARRAY_BUFFER,
+        Some(&vertex_data_ref.borrow().axis_vbo),
+    );
     gl.vertex_attrib_pointer_with_i32(
         0,
         3,
@@ -61,7 +75,10 @@ pub fn render_scene(
     // Render points
     gl.uniform1i(Some(&u_is_rendering_points), 1);
     gl.uniform1i(Some(&u_is_rendering_cubes), 0);
-    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&vertex_data.point_vbo));
+    gl.bind_buffer(
+        WebGlRenderingContext::ARRAY_BUFFER,
+        Some(&vertex_data_ref.borrow().point_vbo),
+    );
     gl.vertex_attrib_pointer_with_i32(
         0,
         3,
@@ -80,13 +97,20 @@ pub fn render_scene(
         3 * std::mem::size_of::<f32>() as i32,
     );
     gl.enable_vertex_attrib_array(1);
-    gl.draw_arrays(WebGlRenderingContext::POINTS, 0, num_points as i32);
+    gl.draw_arrays(
+        WebGlRenderingContext::POINTS,
+        0,
+        vertex_data_ref.borrow().num_points as i32,
+    );
 
     // Render octree cubes
     gl.uniform1i(Some(&u_is_rendering_points), 0);
     gl.uniform1i(Some(&u_is_rendering_cubes), 1);
     gl.uniform1f(Some(&u_cube_transparency), 0.3); // Set the desired transparency value
-    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&vertex_data.cube_vbo));
+    gl.bind_buffer(
+        WebGlRenderingContext::ARRAY_BUFFER,
+        Some(&vertex_data_ref.borrow().cube_vbo),
+    );
     gl.vertex_attrib_pointer_with_i32(
         0,
         3,
@@ -108,43 +132,8 @@ pub fn render_scene(
     gl.draw_arrays(
         WebGlRenderingContext::TRIANGLES,
         0,
-        vertex_data.octree.get_num_cubes() as i32 * 36,
+        vertex_data_ref.borrow().octree.get_num_cubes() as i32 * 36,
     );
-}
-
-fn create_model_view_matrix(
-    distance: f32,
-    mouse_state: &MouseState,
-    mv_matrix_values: &MVMatrixValues,
-) -> nalgebra_glm::Mat4 {
-    let mv_matrix = nalgebra_glm::Mat4::look_at_rh(
-        &mv_matrix_values.eye.into(),
-        &mv_matrix_values.target.into(),
-        &mv_matrix_values.up.into(),
-    );
-    let translation_vector = nalgebra_glm::Vec3::new(0.0, 0.0, -distance);
-    let translated_mv_matrix = mv_matrix.append_translation(&translation_vector);
-    let rotation_x_matrix =
-        nalgebra_glm::Mat4::new_rotation(nalgebra_glm::Vec3::x() * mouse_state.rotation_x);
-    let rotation_y_matrix =
-        nalgebra_glm::Mat4::new_rotation(nalgebra_glm::Vec3::y() * mouse_state.rotation_y);
-    translated_mv_matrix * rotation_x_matrix * rotation_y_matrix
-}
-
-fn create_projection_matrix() -> nalgebra_glm::Mat4 {
-    nalgebra_glm::perspective(800.0 / 600.0, 45.0_f32.to_radians(), 0.1, 100.0)
-}
-
-fn set_uniform_matrices(
-    gl: &WebGlRenderingContext,
-    program: &WebGlProgram,
-    mv_matrix: &nalgebra_glm::Mat4,
-    p_matrix: &nalgebra_glm::Mat4,
-) {
-    let mv_matrix_location = gl.get_uniform_location(&program, "uMVMatrix").unwrap();
-    let p_matrix_location = gl.get_uniform_location(&program, "uPMatrix").unwrap();
-    gl.uniform_matrix4fv_with_f32_array(Some(&mv_matrix_location), false, mv_matrix.as_slice());
-    gl.uniform_matrix4fv_with_f32_array(Some(&p_matrix_location), false, p_matrix.as_slice());
 }
 
 fn setup_rendering(gl: &WebGlRenderingContext) {
@@ -162,13 +151,12 @@ fn setup_rendering(gl: &WebGlRenderingContext) {
 }
 
 pub fn start_render_loop(
-    gl: WebGlRenderingContext,
+    gl: Rc<WebGlRenderingContext>,
     program: WebGlProgram,
-    vertex_data: VertexData,
+    vertex_data: Rc<RefCell<VertexData>>,
     scale_factor: f32,
     mouse_state: Rc<RefCell<MouseState>>,
     mv_matrix_values: Rc<RefCell<MVMatrixValues>>,
-    num_points: u32,
 ) {
     let scale_factor_ref = Rc::new(RefCell::new(scale_factor));
     let mouse_state_clone = mouse_state.clone();
@@ -183,102 +171,42 @@ pub fn start_render_loop(
     let slider_handler = create_slider_handler(mv_matrix_values_clone.clone());
     add_slider_event_listener(slider_handler);
 
+    let num_points_handler = create_num_points_handler(gl.clone(), vertex_data.clone());
+    add_num_points_event_listener(num_points_handler);
+
     *render_loop_clone.borrow_mut() = Some(create_render_loop_closure(
-        gl,
+        gl.clone(),
         program,
-        vertex_data,
+        vertex_data.clone(),
         scale_factor_ref,
         mouse_state_clone,
         render_loop,
         mv_matrix_values_clone,
-        num_points,
     ));
 
     request_animation_frame(render_loop_clone);
 }
 
-fn create_wheel_handler(
-    scale_factor_ref: Rc<RefCell<f32>>,
-) -> Closure<dyn FnMut(web_sys::WheelEvent)> {
-    Closure::wrap(Box::new(move |event: web_sys::WheelEvent| {
-        let mut scale_factor = scale_factor_ref.borrow_mut();
-        let delta = event.delta_y() as f32;
-        *scale_factor += delta * 0.001;
-    }) as Box<dyn FnMut(_)>)
-}
-
-fn add_wheel_event_listener(wheel_handler: Closure<dyn FnMut(web_sys::WheelEvent)>) {
-    web_sys::window()
-        .unwrap()
-        .add_event_listener_with_callback("wheel", wheel_handler.as_ref().unchecked_ref())
-        .unwrap();
-    wheel_handler.forget();
-}
-
-fn create_slider_handler(
-    mv_matrix_values: Rc<RefCell<MVMatrixValues>>,
-) -> Closure<dyn FnMut(web_sys::Event)> {
-    Closure::wrap(Box::new(move |event: web_sys::Event| {
-        let target = event.target().unwrap();
-        let input = target.dyn_ref::<web_sys::HtmlInputElement>().unwrap();
-        let value = input.value().parse::<f32>().unwrap();
-
-        let mut mv_matrix_values = mv_matrix_values.borrow_mut();
-        match input.id().as_str() {
-            "eye-x" => mv_matrix_values.eye.x = value,
-            "eye-y" => mv_matrix_values.eye.y = value,
-            "eye-z" => mv_matrix_values.eye.z = value,
-            "target-x" => mv_matrix_values.target.x = value,
-            "target-y" => mv_matrix_values.target.y = value,
-            "target-z" => mv_matrix_values.target.z = value,
-            "up-x" => mv_matrix_values.up.x = value,
-            "up-y" => mv_matrix_values.up.y = value,
-            "up-z" => mv_matrix_values.up.z = value,
-            _ => {}
-        }
-    }) as Box<dyn FnMut(_)>)
-}
-
-fn add_slider_event_listener(slider_handler: Closure<dyn FnMut(web_sys::Event)>) {
-    let window = web_sys::window().expect("No global window exists");
-    let document = window.document().expect("Should have a document on window");
-    let slider_ids = [
-        "eye-x", "eye-y", "eye-z", "target-x", "target-y", "target-z", "up-x", "up-y", "up-z",
-    ];
-    for slider_id in slider_ids.iter() {
-        let slider = document
-            .query_selector(&format!("input[type=range][id={}]", slider_id))
-            .unwrap()
-            .unwrap();
-        slider
-            .add_event_listener_with_callback("input", slider_handler.as_ref().unchecked_ref())
-            .unwrap();
-    }
-    slider_handler.forget();
-}
-
 fn create_render_loop_closure(
-    gl: WebGlRenderingContext,
+    gl: Rc<WebGlRenderingContext>,
     program: WebGlProgram,
-    vertex_data: VertexData,
+    vertex_data: Rc<RefCell<VertexData>>,
     scale_factor_ref: Rc<RefCell<f32>>,
     mouse_state: Rc<RefCell<MouseState>>,
     render_loop: Rc<RefCell<Option<Closure<dyn FnMut()>>>>,
     mv_matrix_values: Rc<RefCell<MVMatrixValues>>,
-    num_points: u32,
 ) -> Closure<dyn FnMut()> {
     Closure::wrap(Box::new(move || {
         let scale_factor = *scale_factor_ref.borrow();
         let mouse_state = mouse_state.borrow();
         let mv_matrix_values = mv_matrix_values.borrow();
         render_scene(
-            &gl,
+            gl.as_ref(),
             &program,
-            &vertex_data,
+            vertex_data.clone(),
             scale_factor,
             &mouse_state,
             &mv_matrix_values,
-            num_points,
         );
         request_animation_frame(render_loop.clone());
     }) as Box<dyn FnMut()>)
