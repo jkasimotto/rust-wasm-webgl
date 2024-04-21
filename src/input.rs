@@ -58,21 +58,6 @@ pub fn register_num_points_listener(
     Ok(())
 }
 
-pub fn get_num_points_from_html() -> Result<i32, JsValue> {
-    let window = web_sys::window().ok_or("No global `window` exists")?;
-    let document = window
-        .document()
-        .ok_or("Should have a document on window")?;
-    let num_points_input = document
-        .get_element_by_id("num-points")
-        .ok_or("Can't find num-points input element")?;
-    let num_points_str = num_points_input
-        .dyn_into::<web_sys::HtmlInputElement>()?
-        .value();
-    num_points_str
-        .parse()
-        .map_err(|_| JsValue::from_str("Invalid number of points"))
-}
 pub fn add_slider_event_listener(slider_handler: Closure<dyn FnMut(web_sys::Event)>) {
     let window = web_sys::window().expect("No global window exists");
     let document = window.document().expect("Should have a document on window");

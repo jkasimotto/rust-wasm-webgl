@@ -6,6 +6,7 @@ use vertex_buffer::VertexData;
 use wasm_bindgen::prelude::*;
 use web_sys::WebGlRenderingContext;
 
+mod input;
 mod matrix;
 mod mouse;
 mod octree;
@@ -13,17 +14,15 @@ mod render;
 mod shaders;
 mod vertex_buffer;
 mod webgl_utils;
-mod input;
 
 use matrix::MVMatrixValues;
 
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {
     let (gl, program, mouse_state, mv_matrix_values) = setup()?;
-
     let num_points = get_num_points_from_html()?;
-
     let vertex_data = vertex_buffer::create_vertex_buffers(&gl, num_points as u32)?;
+    let scale_factor = 1.0;
 
     register_num_points_listener(
         gl.clone(),
@@ -31,13 +30,14 @@ pub fn start() -> Result<(), JsValue> {
         mouse_state.clone(),
         mv_matrix_values.clone(),
     )?;
-    start_rendering(
-        &gl,
-        &program,
-        &vertex_data,
+    render::start_render_loop(
+        gl.clone(),
+        program.clone(),
+        vertex_data.clone(),
+        scale_factor,
         mouse_state,
         mv_matrix_values,
-        num_points,
+        num_points as u32,
     );
     Ok(())
 }
@@ -63,55 +63,14 @@ fn setup() -> Result<
         .unwrap();
     let gl = webgl_utils::get_webgl_context(&canvas)?;
     let program = shaders::create_shader_program(&gl)?;
-    let mouse_state = setup_mouse_state(&canvas)?;
-    let mv_matrix_values = create_mv_matrix_values();
+    let mouse_state = mouse::create_mouse_state(&canvas)?;
 
-    Ok((gl, program, mouse_state, mv_matrix_values))
-}
-
-
-
-fn setup_vertex_attributes(gl: &WebGlRenderingContext, program: &web_sys::WebGlProgram) {
-    let position_attribute_location = gl.get_attrib_location(program, "position");
-    let color_attribute_location = gl.get_attrib_location(program, "color");
-    vertex_buffer::set_vertex_attribute_pointer(
-        gl,
-        position_attribute_location as u32,
-        color_attribute_location as u32,
-    );
-}
-
-fn setup_mouse_state(
-    canvas: &web_sys::HtmlCanvasElement,
-) -> Result<Rc<RefCell<mouse::MouseState>>, JsValue> {
-    mouse::create_mouse_state(canvas)
-}
-
-fn create_mv_matrix_values() -> Rc<RefCell<MVMatrixValues>> {
     let eye = vec3(0.0, 0.0, 5.0);
     let target = vec3(0.0, 0.0, 0.0);
     let up = vec3(0.0, 1.0, 0.0);
-    Rc::new(RefCell::new(MVMatrixValues { eye, target, up }))
-}
+    let mv_matrix_values = Rc::new(RefCell::new(MVMatrixValues { eye, target, up }));
 
-fn start_rendering(
-    gl: &WebGlRenderingContext,
-    program: &web_sys::WebGlProgram,
-    vertex_data: &VertexData,
-    mouse_state: Rc<RefCell<mouse::MouseState>>,
-    mv_matrix_values: Rc<RefCell<MVMatrixValues>>,
-    num_points: i32,
-) {
-    let scale_factor = 1.0;
-    render::start_render_loop(
-        gl.clone(),
-        program.clone(),
-        vertex_data.clone(),
-        scale_factor,
-        mouse_state,
-        mv_matrix_values,
-        num_points as u32,
-    );
+    Ok((gl, program, mouse_state, mv_matrix_values))
 }
 
 fn register_num_points_listener(
@@ -156,7 +115,6 @@ fn update_num_points(
     num_points: i32,
 ) {
     let vertex_data = vertex_buffer::create_vertex_buffers(gl, num_points as u32).unwrap();
-    setup_vertex_attributes(gl, program);
 
     let scale_factor = 1.0;
     render::start_render_loop(
